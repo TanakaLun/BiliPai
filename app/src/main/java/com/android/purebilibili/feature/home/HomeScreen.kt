@@ -13,7 +13,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
@@ -42,55 +41,38 @@ fun HomeScreen(
     val context = LocalContext.current
     val gridState = rememberLazyGridState()
 
-    // 滚动状态检测
-    val isScrolled by remember {
+    val scrollOffset by remember {
         derivedStateOf {
-            gridState.firstVisibleItemIndex > 0 || gridState.firstVisibleItemScrollOffset > 20
+            if (gridState.firstVisibleItemIndex > 0) 500f
+            else gridState.firstVisibleItemScrollOffset.toFloat()
         }
     }
 
-    // --- 状态栏与沉浸式逻辑 ---
     val view = LocalView.current
-    val backgroundColor = MaterialTheme.colorScheme.background
-
-    val isLightBackground = remember(backgroundColor) {
-        backgroundColor.luminance() > 0.5f
-    }
-
     if (!view.isInEditMode) {
-        DisposableEffect(isLightBackground) {
+        SideEffect {
             val window = (view.context as Activity).window
-            val insetsController = WindowCompat.getInsetsController(window, view)
-            insetsController.isAppearanceLightStatusBars = isLightBackground
+            WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = true
             window.statusBarColor = Color.Transparent.toArgb()
             window.navigationBarColor = Color.Transparent.toArgb()
-            onDispose { }
         }
     }
 
-    // 计算内边距
     val density = LocalDensity.current
     val statusBarHeight = WindowInsets.statusBars.getTop(density).let { with(density) { it.toDp() } }
     val navBarHeight = WindowInsets.navigationBars.getBottom(density).let { with(density) { it.toDp() } }
 
-    // 🔥🔥🔥 【修改】调整顶部 Padding 以适配新的单行 TopBar 🔥🔥🔥
-    // 状态栏高度 + TopBar 内容高度 (64dp) + 列表顶部留白 (8dp)
-    val topContentPadding = statusBarHeight + 64.dp + 8.dp
+    // 内容的 Padding：状态栏 + TopBar(64) + 间距
+    val topBarHeight = 64.dp
+    val contentTopPadding = statusBarHeight + topBarHeight + 16.dp
 
-    val bottomContentPadding = navBarHeight + 16.dp
-
-    // 显示模式
     val prefs = remember { context.getSharedPreferences("app_prefs", Context.MODE_PRIVATE) }
-    var displayMode by remember { mutableIntStateOf(prefs.getInt("display_mode", 0)) }
     var showWelcomeDialog by remember { mutableStateOf(false) }
-
-    SideEffect { displayMode = prefs.getInt("display_mode", 0) }
 
     LaunchedEffect(Unit) {
         if (prefs.getBoolean("is_first_run", true)) showWelcomeDialog = true
     }
 
-    // 自动加载更多
     val shouldLoadMore by remember {
         derivedStateOf {
             val layoutInfo = gridState.layoutInfo
@@ -101,7 +83,6 @@ fun HomeScreen(
     }
     LaunchedEffect(shouldLoadMore) { if (shouldLoadMore) viewModel.loadMore() }
 
-    // 下拉刷新逻辑
     if (pullRefreshState.isRefreshing) {
         LaunchedEffect(true) { viewModel.refresh() }
     }
@@ -118,7 +99,7 @@ fun HomeScreen(
                 .fillMaxSize()
                 .nestedScroll(pullRefreshState.nestedScrollConnection)
         ) {
-            // 底层：视频列表
+            // 1. 底层：视频列表
             if (state.isLoading && state.videos.isEmpty()) {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     CircularProgressIndicator(color = BiliPink)
@@ -126,72 +107,52 @@ fun HomeScreen(
             } else if (state.error != null && state.videos.isEmpty()) {
                 ErrorState(state.error!!) { viewModel.refresh() }
             } else {
-                val columnsCount = if (displayMode == 1) 1 else 2
                 LazyVerticalGrid(
                     state = gridState,
-                    columns = GridCells.Fixed(columnsCount),
-                    // 使用新的 contentPadding
+                    columns = GridCells.Fixed(2),
                     contentPadding = PaddingValues(
-                        start = 12.dp,
-                        end = 12.dp,
-                        top = topContentPadding,
-                        bottom = bottomContentPadding
+                        start = 16.dp,
+                        end = 16.dp,
+                        top = contentTopPadding,
+                        bottom = navBarHeight + 20.dp
                     ),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp),
                     modifier = Modifier.fillMaxSize()
                 ) {
                     itemsIndexed(
                         items = state.videos,
-                        key = { _, video -> video.bvid },
-                        contentType = { _, _ -> "video_card" }
+                        key = { _, video -> video.bvid }
                     ) { index, video ->
-                        if (displayMode == 1) {
-                            ImmersiveVideoCard(video, index) { bvid, cid ->
-                                onVideoClick(bvid, cid, video.pic)
-                            }
-                        } else {
-                            ElegantVideoCard(video, index) { bvid, cid ->
-                                onVideoClick(bvid, cid, video.pic)
-                            }
+                        ElegantVideoCard(video, index) { bvid, cid ->
+                            onVideoClick(bvid, cid, video.pic)
                         }
                     }
                     if (state.videos.isNotEmpty() && state.isLoading) {
-                        item(span = { GridItemSpan(columnsCount) }) {
-                            Box(
-                                Modifier
-                                    .fillMaxWidth()
-                                    .padding(24.dp),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.size(24.dp),
-                                    color = Color.Gray,
-                                    strokeWidth = 2.dp
-                                )
+                        item(span = { GridItemSpan(2) }) {
+                            Box(Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) {
+                                CircularProgressIndicator(modifier = Modifier.size(24.dp), color = MaterialTheme.colorScheme.primary, strokeWidth = 2.dp)
                             }
                         }
                     }
                 }
             }
 
-            // 下拉刷新指示器
+            // 2. 中层：顶栏
+            FluidHomeTopBar(
+                user = state.user,
+                scrollOffset = scrollOffset,
+                onAvatarClick = { if (state.user.isLogin) onProfileClick() else onAvatarClick() },
+                onSettingsClick = onSettingsClick,
+                onSearchClick = onSearchClick
+            )
+
+            // 3. 顶层：刷新指示器 (🔥 修复：不加 padding，让它从屏幕最顶部滑下来，覆盖在顶栏之上)
             PullToRefreshContainer(
                 state = pullRefreshState,
                 modifier = Modifier.align(Alignment.TopCenter),
-                containerColor = BiliPink,
-                contentColor = Color.White
-            )
-
-            // 顶层：新的 TopBar
-            HomeTopBar(
-                user = state.user,
-                isScrolled = isScrolled,
-                onAvatarClick = {
-                    if (state.user.isLogin) onProfileClick() else onAvatarClick()
-                },
-                onSettingsClick = onSettingsClick,
-                onSearchClick = onSearchClick
+                containerColor = MaterialTheme.colorScheme.surface, // 白色背景
+                contentColor = BiliPink
             )
         }
     }
