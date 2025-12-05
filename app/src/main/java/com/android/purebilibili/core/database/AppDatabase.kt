@@ -22,7 +22,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "app_database"
                 )
-                    .allowMainThreadQueries() // 仅限开发调试，正式版建议去掉
+                    // 🔥 性能优化：移除 allowMainThreadQueries，强制使用协程  
                     .build()
                 INSTANCE = instance
                 instance

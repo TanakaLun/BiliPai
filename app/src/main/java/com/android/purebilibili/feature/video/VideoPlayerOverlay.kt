@@ -44,13 +44,17 @@ fun VideoPlayerOverlay(
     isDanmakuOn: Boolean,
     currentQualityLabel: String,
     qualityLabels: List<String>,
+    qualityIds: List<Int> = emptyList(), // 🔥 新增: 清晰度ID列表
+    isLoggedIn: Boolean = false, // 🔥 新增: 登录状态
     onQualitySelected: (Int) -> Unit,
     onToggleDanmaku: () -> Unit,
     onBack: () -> Unit,
     onToggleFullscreen: () -> Unit,
     // 🔥🔥 [新增参数] 是否显示统计信息，以及分辨率字符串
     showStats: Boolean = false,
-    realResolution: String = ""
+    realResolution: String = "",
+    // 🔥🔥 [新增参数] 清晰度切换中状态
+    isQualitySwitching: Boolean = false
 ) {
     var showQualityMenu by remember { mutableStateOf(false) }
     var isPlaying by remember { mutableStateOf(player.isPlaying) }
@@ -181,7 +185,7 @@ fun VideoPlayerOverlay(
 
         // --- 5. 中央播放/暂停大图标 ---
         AnimatedVisibility(
-            visible = isVisible && !isPlaying,
+            visible = isVisible && !isPlaying && !isQualitySwitching,
             modifier = Modifier.align(Alignment.Center),
             enter = scaleIn(tween(250)) + fadeIn(tween(200)),
             exit = scaleOut(tween(200)) + fadeOut(tween(200))
@@ -203,11 +207,45 @@ fun VideoPlayerOverlay(
             }
         }
 
+        // --- 5.5 🔥🔥 清晰度切换中 Loading 指示器 ---
+        AnimatedVisibility(
+            visible = isQualitySwitching,
+            modifier = Modifier.align(Alignment.Center),
+            enter = fadeIn(tween(200)),
+            exit = fadeOut(tween(200))
+        ) {
+            Surface(
+                color = Color.Black.copy(alpha = 0.7f),
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier.padding(24.dp)
+            ) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier.padding(horizontal = 24.dp, vertical = 16.dp)
+                ) {
+                    CircularProgressIndicator(
+                        color = BiliPink,
+                        strokeWidth = 3.dp,
+                        modifier = Modifier.size(36.dp)
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text(
+                        text = "正在切换清晰度...",
+                        color = Color.White,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
+            }
+        }
+
         // --- 6. 清晰度菜单 ---
         if (showQualityMenu) {
             QualitySelectionMenu(
                 qualities = qualityLabels,
+                qualityIds = qualityIds,
                 currentQuality = currentQualityLabel,
+                isLoggedIn = isLoggedIn,
                 onQualitySelected = { index ->
                     onQualitySelected(index)
                     showQualityMenu = false
@@ -381,10 +419,22 @@ fun VideoProgressBar(
 @Composable
 fun QualitySelectionMenu(
     qualities: List<String>,
+    qualityIds: List<Int> = emptyList(), // 🔥 新增: 清晰度ID列表用于判断VIP要求
     currentQuality: String,
+    isLoggedIn: Boolean = false, // 🔥 新增: 是否已登录
     onQualitySelected: (Int) -> Unit,
     onDismiss: () -> Unit
 ) {
+    // 🔥 判断清晰度是否需要特殊权限
+    fun getQualityTag(qualityId: Int): String? {
+        return when (qualityId) {
+            127, 126, 125, 120 -> "大会员" // 8K, 杜比, HDR, 4K
+            116, 112 -> "大会员"          // 1080P60, 1080P+
+            80 -> if (!isLoggedIn) "登录" else null // 1080P 需要登录
+            else -> null
+        }
+    }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -397,7 +447,7 @@ fun QualitySelectionMenu(
     ) {
         Surface(
             modifier = Modifier
-                .widthIn(min = 180.dp, max = 240.dp)
+                .widthIn(min = 200.dp, max = 280.dp)
                 .clip(RoundedCornerShape(12.dp))
                 .clickable(enabled = false) {},
             color = Color(0xFF2B2B2B),
@@ -415,6 +465,9 @@ fun QualitySelectionMenu(
                 HorizontalDivider(color = Color.White.copy(0.1f))
                 qualities.forEachIndexed { index, quality ->
                     val isSelected = quality == currentQuality
+                    val qualityId = qualityIds.getOrNull(index) ?: 0
+                    val tag = getQualityTag(qualityId)
+
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -427,9 +480,28 @@ fun QualitySelectionMenu(
                             text = quality,
                             color = if (isSelected) BiliPink else Color.White.copy(0.9f),
                             fontSize = 14.sp,
-                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                            modifier = Modifier.weight(1f)
+                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
                         )
+                        
+                        // 🔥 显示权限标签
+                        if (tag != null) {
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Surface(
+                                color = if (tag == "大会员") Color(0xFFFB7299) else Color(0xFF666666),
+                                shape = RoundedCornerShape(4.dp)
+                            ) {
+                                Text(
+                                    text = tag,
+                                    color = Color.White,
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                )
+                            }
+                        }
+                        
+                        Spacer(modifier = Modifier.weight(1f))
+                        
                         if (isSelected) {
                             Icon(Icons.Default.Check, null, tint = BiliPink, modifier = Modifier.size(18.dp))
                         }

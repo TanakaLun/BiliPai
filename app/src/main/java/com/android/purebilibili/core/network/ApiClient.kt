@@ -37,7 +37,11 @@ interface BilibiliApi {
     suspend fun getFavFolders(@Query("up_mid") mid: Long): FavFolderResponse
 
     @GET("x/v3/fav/resource/list")
-    suspend fun getFavoriteListStub(@Query("media_id") mediaId: Long, @Query("ps") ps: Int = 20): ListResponse<FavoriteData>
+    suspend fun getFavoriteList(
+        @Query("media_id") mediaId: Long, 
+        @Query("pn") pn: Int = 1,
+        @Query("ps") ps: Int = 20
+    ): ListResponse<FavoriteData>
 
     @GET("x/web-interface/wbi/index/top/feed/rcmd")
     suspend fun getRecommendParams(@QueryMap params: Map<String, String>): RecommendResponse

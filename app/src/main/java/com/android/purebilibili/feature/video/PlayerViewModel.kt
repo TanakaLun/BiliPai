@@ -18,16 +18,7 @@ import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
 import java.io.InputStream
 
-// 二级评论状态
-data class SubReplyUiState(
-    val visible: Boolean = false,
-    val rootReply: ReplyItem? = null,
-    val items: List<ReplyItem> = emptyList(),
-    val isLoading: Boolean = false,
-    val page: Int = 1,
-    val isEnd: Boolean = false,
-    val error: String? = null
-)
+// 移除 SubReplyUiState 定义，移入 VideoCommentViewModel.kt
 
 sealed class PlayerUiState {
     object Loading : PlayerUiState()
@@ -35,18 +26,18 @@ sealed class PlayerUiState {
         val info: ViewInfo,
         val playUrl: String,
         val related: List<RelatedVideo> = emptyList(),
-        val danmakuStream: InputStream? = null,
+        val danmakuData: ByteArray? = null,
         val currentQuality: Int = 64,
         val qualityLabels: List<String> = emptyList(),
         val qualityIds: List<Int> = emptyList(),
         val startPosition: Long = 0L,
+        // 🔥 新增：清晰度切换状态
+        val isQualitySwitching: Boolean = false,
+        val requestedQuality: Int? = null, // 用户请求的清晰度，用于显示降级提示
+        // 🔥 新增：登录状态
+        val isLoggedIn: Boolean = false,
 
-        val replies: List<ReplyItem> = emptyList(),
-        val isRepliesLoading: Boolean = false,
-        val replyCount: Int = 0,
-        val repliesError: String? = null,
-        val isRepliesEnd: Boolean = false,
-        val nextPage: Int = 1,
+        // 移除评论相关状态: replies, isRepliesLoading, replyCount, repliesError, isRepliesEnd, nextPage
 
         val emoteMap: Map<String, String> = emptyMap()
     ) : PlayerUiState()
@@ -57,8 +48,7 @@ class PlayerViewModel : ViewModel() {
     private val _uiState = MutableStateFlow<PlayerUiState>(PlayerUiState.Loading)
     val uiState = _uiState.asStateFlow()
 
-    private val _subReplyState = MutableStateFlow(SubReplyUiState())
-    val subReplyState = _subReplyState.asStateFlow()
+    // 移除 subReplyState
 
     private val _toastEvent = Channel<String>()
     val toastEvent = _toastEvent.receiveAsFlow()
@@ -121,7 +111,7 @@ class PlayerViewModel : ViewModel() {
 
             detailResult.onSuccess { (info, playData) ->
                 currentCid = info.cid
-                val danmaku = VideoRepository.getDanmakuStream(info.cid)
+                val danmaku = VideoRepository.getDanmakuRawData(info.cid)
                 val url = playData.durl?.firstOrNull()?.url ?: ""
                 val qualities = playData.accept_quality ?: emptyList()
                 val labels = playData.accept_description ?: emptyList()
@@ -129,18 +119,22 @@ class PlayerViewModel : ViewModel() {
 
                 if (url.isNotEmpty()) {
                     playVideo(url)
+                    // 🔥 获取登录状态
+                    val isLogin = !com.android.purebilibili.core.store.TokenManager.sessDataCache.isNullOrEmpty()
+                    
                     _uiState.value = PlayerUiState.Success(
                         info = info,
                         playUrl = url,
                         related = relatedVideos,
-                        danmakuStream = danmaku,
+                        danmakuData = danmaku,
                         currentQuality = realQuality,
                         qualityIds = qualities,
                         qualityLabels = labels,
                         startPosition = 0L,
-                        emoteMap = emoteMap
+                        emoteMap = emoteMap,
+                        isLoggedIn = isLogin
                     )
-                    loadComments(info.aid)
+                    // 移除 loadComments 调用
                 } else {
                     _uiState.value = PlayerUiState.Error("无法获取播放地址")
                 }
@@ -149,102 +143,41 @@ class PlayerViewModel : ViewModel() {
             }
         }
     }
-
-    // --- 评论加载逻辑 ---
-    fun loadComments(aid: Long) {
-        val currentState = _uiState.value
-        if (currentState is PlayerUiState.Success) {
-            if (currentState.isRepliesEnd || currentState.isRepliesLoading) return
-
-            _uiState.value = currentState.copy(isRepliesLoading = true, repliesError = null)
-
-            viewModelScope.launch {
-                val pageToLoad = currentState.nextPage
-                val result = VideoRepository.getComments(aid, pageToLoad, 20)
-
-                result.onSuccess { data ->
-                    val current = _uiState.value
-                    if (current is PlayerUiState.Success) {
-                        val isEnd = data.cursor.isEnd || data.replies.isNullOrEmpty()
-                        _uiState.value = current.copy(
-                            replies = (current.replies + (data.replies ?: emptyList())).distinctBy { it.rpid },
-                            replyCount = data.cursor.allCount,
-                            isRepliesLoading = false,
-                            repliesError = null,
-                            isRepliesEnd = isEnd,
-                            nextPage = pageToLoad + 1
-                        )
-                    }
-                }.onFailure { e ->
-                    val current = _uiState.value
-                    if (current is PlayerUiState.Success) {
-                        _uiState.value = current.copy(
-                            isRepliesLoading = false,
-                            repliesError = e.message ?: "加载评论失败"
-                        )
-                    }
-                }
-            }
-        }
-    }
-
-    fun openSubReply(rootReply: ReplyItem) {
-        _subReplyState.value = SubReplyUiState(
-            visible = true,
-            rootReply = rootReply,
-            isLoading = true,
-            page = 1
-        )
-        loadSubReplies(rootReply.oid, rootReply.rpid, 1)
-    }
-
-    fun closeSubReply() {
-        _subReplyState.value = _subReplyState.value.copy(visible = false)
-    }
-
-    fun loadMoreSubReplies() {
-        val state = _subReplyState.value
-        if (state.isLoading || state.isEnd || state.rootReply == null) return
-        val nextPage = state.page + 1
-        _subReplyState.value = state.copy(isLoading = true)
-        loadSubReplies(state.rootReply.oid, state.rootReply.rpid, nextPage)
-    }
-
-    private fun loadSubReplies(oid: Long, rootId: Long, page: Int) {
-        viewModelScope.launch {
-            val result = VideoRepository.getSubComments(oid, rootId, page)
-            result.onSuccess { data ->
-                val current = _subReplyState.value
-                val newItems = data.replies ?: emptyList()
-                val isEnd = data.cursor.isEnd || newItems.isEmpty()
-
-                _subReplyState.value = current.copy(
-                    items = if (page == 1) newItems else (current.items + newItems).distinctBy { it.rpid },
-                    isLoading = false,
-                    page = page,
-                    isEnd = isEnd,
-                    error = null
-                )
-            }.onFailure {
-                _subReplyState.value = _subReplyState.value.copy(
-                    isLoading = false,
-                    error = it.message
-                )
-            }
-        }
-    }
+    
+    // 移除 loadComments, openSubReply, closeSubReply, loadMoreSubReplies, loadSubReplies
 
     // --- 核心优化: 清晰度切换 ---
     fun changeQuality(qualityId: Int, currentPos: Long) {
         val currentState = _uiState.value
         if (currentState is PlayerUiState.Success) {
+            // 🔥 防止重复切换：如果正在切换中或已是目标画质，则跳过
+            if (currentState.isQualitySwitching) {
+                viewModelScope.launch { _toastEvent.send("正在切换中，请稍候...") }
+                return
+            }
+            if (currentState.currentQuality == qualityId) {
+                viewModelScope.launch { _toastEvent.send("已是当前清晰度") }
+                return
+            }
+
             viewModelScope.launch {
+                // 🔥 进入切换状态
+                _uiState.value = currentState.copy(
+                    isQualitySwitching = true,
+                    requestedQuality = qualityId
+                )
+
                 try {
                     fetchAndPlay(
                         currentBvid, currentCid, qualityId,
                         currentState, currentPos
                     )
                 } catch (e: Exception) {
+                    // 🔥 切换失败，恢复状态
+                    _uiState.value = currentState.copy(
+                        isQualitySwitching = false,
+                        requestedQuality = null
+                    )
                     _toastEvent.send("清晰度切换失败: ${e.message}")
                 }
             }
@@ -266,27 +199,35 @@ class PlayerViewModel : ViewModel() {
         val realQuality = playUrlData?.quality ?: qn
 
         if (url.isNotEmpty()) {
-            // 修改 2] 传入 forceReset = true，强制 ExoPlayer 刷新
+            // 🔥 强制 ExoPlayer 重置，确保真正切换流
             playVideo(url, startPos, forceReset = true)
 
+            // 🔥 切换完成，更新状态并清除切换标志
             _uiState.value = currentState.copy(
                 playUrl = url,
                 currentQuality = realQuality,
                 qualityIds = qualities,
                 qualityLabels = labels,
-                startPosition = startPos
+                startPosition = startPos,
+                isQualitySwitching = false,
+                requestedQuality = null
             )
 
-            // 提示用户实际切换结果
+            // 🔥 提示用户实际切换结果
             val targetLabel = labels.getOrNull(qualities.indexOf(qn)) ?: "$qn"
             val realLabel = labels.getOrNull(qualities.indexOf(realQuality)) ?: "$realQuality"
 
             if (realQuality != qn) {
-                _toastEvent.send("尝试切换至 $targetLabel 失败，已降级至 $realLabel (可能需要登录)")
+                _toastEvent.send("⚠️ $targetLabel 需要登录大会员，已自动切换至 $realLabel")
             } else {
-                _toastEvent.send("已切换至 $realLabel")
+                _toastEvent.send("✓ 已切换至 $realLabel")
             }
         } else {
+            // 🔥 切换失败，恢复状态
+            _uiState.value = currentState.copy(
+                isQualitySwitching = false,
+                requestedQuality = null
+            )
             _toastEvent.send("该清晰度无法播放")
         }
     }

@@ -60,7 +60,7 @@ fun PureBiliBiliTheme(
 
     MaterialTheme(
         colorScheme = colorScheme,
-        typography = androidx.compose.material3.Typography(),
+        typography = BiliTypography,
         content = content
     )
 }

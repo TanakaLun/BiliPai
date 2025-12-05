@@ -30,7 +30,7 @@ object VideoRepository {
             )
             val signedParams = WbiUtils.sign(params, imgKey, subKey)
             val feedResp = api.getRecommendParams(signedParams)
-            val list = feedResp.data?.item?.map { it.toVideoItem() } ?: emptyList()
+            val list = feedResp.data?.item?.map { it.toVideoItem() }?.filter { it.bvid.isNotEmpty() } ?: emptyList()
             Result.success(list)
         } catch (e: Exception) {
             e.printStackTrace()
@@ -192,7 +192,44 @@ object VideoRepository {
         try { api.getRelatedVideos(bvid).data ?: emptyList() } catch (e: Exception) { emptyList() }
     }
 
-    suspend fun getDanmakuStream(cid: Long): InputStream? = withContext(Dispatchers.IO) {
-        try { api.getDanmakuXml(cid).byteStream() } catch (e: Exception) { null }
+    suspend fun getDanmakuRawData(cid: Long): ByteArray? = withContext(Dispatchers.IO) {
+        try {
+            val responseBody = api.getDanmakuXml(cid)
+            val bytes = responseBody.bytes() // 下载所有数据
+
+            if (bytes.isEmpty()) return@withContext null
+
+            // 检查首字节 判断是否压缩
+            // XML 以 '<' 开头 (0x3C)
+            if (bytes[0] == 0x3C.toByte()) {
+                return@withContext bytes
+            }
+
+            // 尝试 Deflate 解压
+            try {
+                val inflater = java.util.zip.Inflater(true) // nowrap=true
+                inflater.setInput(bytes)
+                val buffer = ByteArray(1024 * 1024 * 4) // max 4MB buffer? 自动扩容较麻烦，先用 simple approach
+                val outputStream = java.io.ByteArrayOutputStream(bytes.size * 3)
+                val tempBuffer = ByteArray(1024)
+                while (!inflater.finished()) {
+                    val count = inflater.inflate(tempBuffer)
+                    if (count == 0) {
+                         if (inflater.needsInput()) break
+                         if (inflater.needsDictionary()) break
+                    }
+                    outputStream.write(tempBuffer, 0, count)
+                }
+                inflater.end()
+                return@withContext outputStream.toByteArray()
+            } catch (e: Exception) {
+                e.printStackTrace()
+                // 如果解压失败，返回原始数据（万一是普通 XML 但只有空格在前？）
+                return@withContext bytes
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+            null
+        }
     }
 }

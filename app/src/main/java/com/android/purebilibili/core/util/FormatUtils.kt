@@ -46,4 +46,15 @@ object FormatUtils {
         }
         return newUrl
     }
+
+    /**
+     * 格式化观看进度
+     */
+    fun formatProgress(progress: Int, duration: Int): String {
+        if (duration <= 0) return "已看"
+        if (progress == -1) return "已看" // finish
+        if (progress == 0) return "未观看"
+        val percent = (progress.toFloat() / duration.toFloat() * 100).toInt()
+        return if (percent >= 99) "已看完" else "已看$percent%"
+    }
 }

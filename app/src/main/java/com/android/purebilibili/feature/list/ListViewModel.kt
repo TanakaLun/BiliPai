@@ -47,9 +47,8 @@ abstract class BaseListViewModel(application: Application, private val pageTitle
 // --- 历史记录 ViewModel ---
 class HistoryViewModel(application: Application) : BaseListViewModel(application, "历史记录") {
     override suspend fun fetchItems(): List<VideoItem> {
-        val response = NetworkModule.api.getHistoryList()
-        // 过滤并映射数据
-        return response.data?.list?.map { it.toVideoItem() } ?: emptyList()
+        val result = com.android.purebilibili.data.repository.HistoryRepository.getHistoryList()
+        return result.getOrNull()?.map { it.toVideoItem() } ?: emptyList()
     }
 }
 
@@ -66,8 +65,8 @@ class FavoriteViewModel(application: Application) : BaseListViewModel(applicatio
         }
 
         // 2. 获取该用户的收藏夹列表
-        val foldersResp = api.getFavFolders(mid)
-        val folders = foldersResp.data?.list
+        val foldersResult = com.android.purebilibili.data.repository.FavoriteRepository.getFavFolders(mid)
+        val folders = foldersResult.getOrNull()
         if (folders.isNullOrEmpty()) {
             return emptyList()
         }
@@ -76,7 +75,7 @@ class FavoriteViewModel(application: Application) : BaseListViewModel(applicatio
         val defaultFolderId = folders[0].id
 
         // 4. 获取该收藏夹内的视频
-        val listResp = api.getFavoriteListStub(mediaId = defaultFolderId)
-        return listResp.data?.medias?.map { it.toVideoItem() } ?: emptyList()
+        val listResult = com.android.purebilibili.data.repository.FavoriteRepository.getFavoriteList(mediaId = defaultFolderId, pn = 1)
+        return listResult.getOrNull()?.map { it.toVideoItem() } ?: emptyList()
     }
 }

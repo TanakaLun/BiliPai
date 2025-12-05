@@ -1,20 +1,29 @@
 package com.android.purebilibili.feature.login
 
-import androidx.compose.foundation.Image
+import androidx.compose.animation.*
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.android.purebilibili.core.theme.BiliPink
+import kotlinx.coroutines.launch
 
+// 登录方式枚举
+enum class LoginMethod {
+    QR_CODE,    // 扫码登录
+    WEB_LOGIN   // 网页登录
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LoginScreen(
     viewModel: LoginViewModel = viewModel(),
@@ -22,6 +31,9 @@ fun LoginScreen(
     onClose: () -> Unit
 ) {
     val state by viewModel.state.collectAsState()
+    var selectedMethod by remember { mutableStateOf(LoginMethod.QR_CODE) }
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
 
     // 第一次进入加载二维码
     LaunchedEffect(Unit) {
@@ -40,46 +52,103 @@ fun LoginScreen(
         }
     }
 
-    Surface(modifier = Modifier.fillMaxSize(), color = Color.White) {
-        Box(modifier = Modifier.fillMaxSize()) {
-            // 关闭按钮
-            IconButton(
-                onClick = onClose,
-                modifier = Modifier.align(Alignment.TopStart).padding(16.dp).statusBarsPadding()
-            ) {
-                Icon(Icons.Default.Close, contentDescription = "Close")
-            }
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color(0xFF0D0D0D)) // 深色背景
+    ) {
+        // 🔥 顶部装饰渐变
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(300.dp)
+                .background(
+                    Brush.verticalGradient(
+                        colors = listOf(
+                            BiliPink.copy(alpha = 0.3f),
+                            BiliPink.copy(alpha = 0.1f),
+                            Color.Transparent
+                        )
+                    )
+                )
+        )
 
+        // 🔥 浮动装饰圆 (Extracted)
+        FloatingDecorations()
+
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .statusBarsPadding()
+        ) {
+            // 顶部栏 (Extracted)
+            TopBar(onClose = onClose)
+
+            // 主内容
             Column(
-                modifier = Modifier.align(Alignment.Center),
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 24.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Text("扫码登录 Bilibili", style = MaterialTheme.typography.headlineMedium, color = BiliPink)
                 Spacer(modifier = Modifier.height(32.dp))
 
-                when (val s = state) {
-                    is LoginState.Loading -> CircularProgressIndicator(color = BiliPink)
-                    is LoginState.Error -> {
-                        Text("错误: ${s.msg}", color = Color.Red)
-                        Spacer(modifier = Modifier.height(16.dp))
-                        Button(onClick = { viewModel.loadQrCode() }) { Text("刷新二维码") }
-                    }
-                    is LoginState.QrCode -> {
-                        Image(
-                            bitmap = s.bitmap.asImageBitmap(),
-                            contentDescription = "QR Code",
-                            modifier = Modifier.size(240.dp)
-                        )
-                        Spacer(modifier = Modifier.height(24.dp))
-                        Text("请打开 Bilibili 手机端", style = MaterialTheme.typography.bodyLarge)
-                        Text("点击首页右上角扫一扫", style = MaterialTheme.typography.bodyMedium, color = Color.Gray)
-                    }
-                    is LoginState.Success -> {
-                        CircularProgressIndicator(color = BiliPink)
-                        Text("登录成功，正在跳转...", modifier = Modifier.padding(top = 16.dp))
+                // 🔥 Logo 和标题 (Extracted)
+                BrandingSection()
+
+                Spacer(modifier = Modifier.height(40.dp))
+
+                // 🔥 登录方式选择 (Extracted)
+                LoginMethodTabs(
+                    selectedMethod = selectedMethod,
+                    onMethodChange = { selectedMethod = it }
+                )
+
+                Spacer(modifier = Modifier.height(24.dp))
+
+                // 🔥 登录内容区域
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth()
+                ) {
+                    AnimatedContent(
+                        targetState = selectedMethod,
+                        transitionSpec = {
+                            fadeIn(tween(300)) + slideInHorizontally { if (targetState == LoginMethod.WEB_LOGIN) it else -it } togetherWith
+                                    fadeOut(tween(300)) + slideOutHorizontally { if (targetState == LoginMethod.WEB_LOGIN) -it else it }
+                        },
+                        label = "login_method"
+                    ) { method ->
+                        when (method) {
+                            LoginMethod.QR_CODE -> QrCodeLoginContent(
+                                state = state,
+                                onRefresh = { viewModel.loadQrCode() }
+                            )
+                            LoginMethod.WEB_LOGIN -> WebLoginContent(
+                                onLoginSuccess = {
+                                    scope.launch { onLoginSuccess() }
+                                }
+                            )
+                        }
                     }
                 }
+
+                // 🔥 底部安全提示
+                SecurityFooter()
+
+                Spacer(modifier = Modifier.height(24.dp))
             }
         }
     }
+}
+
+@Composable
+fun SecurityFooter() {
+    Text(
+        text = "登录即代表同意 Bilibili 服务协议和隐私政策",
+        color = Color.White.copy(alpha = 0.3f),
+        fontSize = 12.sp,
+        modifier = Modifier.padding(bottom = 16.dp)
+    )
 }

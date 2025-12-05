@@ -11,6 +11,7 @@ import android.graphics.drawable.BitmapDrawable
 import android.net.Uri
 import android.os.Build
 import android.view.WindowManager
+import java.io.InputStream
 import androidx.activity.ComponentActivity
 import androidx.compose.runtime.*
 import androidx.core.app.NotificationCompat
@@ -21,7 +22,7 @@ import androidx.media3.datasource.okhttp.OkHttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.session.MediaSession
-import coil.ImageLoader
+import coil.imageLoader
 import coil.request.ImageRequest
 import coil.request.SuccessResult
 import coil.size.Scale
@@ -31,6 +32,7 @@ import com.android.purebilibili.core.network.NetworkModule
 import com.android.purebilibili.core.util.FormatUtils
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import master.flame.danmaku.danmaku.model.android.DanmakuContext
 import master.flame.danmaku.ui.widget.DanmakuView
@@ -45,7 +47,9 @@ class VideoPlayerState(
     val context: Context,
     val player: ExoPlayer,
     val danmakuView: DanmakuView,
-    val mediaSession: MediaSession
+    val mediaSession: MediaSession,
+    // 🔥 性能优化：传入受管理的 CoroutineScope，避免内存泄漏
+    private val scope: CoroutineScope
 ) {
     var isDanmakuOn by mutableStateOf(true)
 
@@ -67,8 +71,8 @@ class VideoPlayerState(
 
         player.replaceMediaItem(player.currentMediaItemIndex, newItem)
 
-        // 2. 异步加载图片 + 主线程发通知
-        CoroutineScope(Dispatchers.IO).launch {
+        // 2. 🔥 性能优化：使用传入的 scope 而非裸创建的 CoroutineScope
+        scope.launch(Dispatchers.IO) {
             val bitmap = loadBitmap(context, coverUrl)
 
             // 切回主线程操作 Player 和发送通知
@@ -80,7 +84,8 @@ class VideoPlayerState(
 
     private suspend fun loadBitmap(context: Context, url: String): Bitmap? {
         return try {
-            val loader = ImageLoader(context)
+            // 🔥 性能优化：使用 Coil 单例，避免重复创建 ImageLoader
+            val loader = context.imageLoader
             val request = ImageRequest.Builder(context)
                 .data(FormatUtils.fixImageUrl(url))
                 .allowHardware(false)
@@ -133,6 +138,39 @@ class VideoPlayerState(
             notificationManager.notify(NOTIFICATION_ID, builder.build())
         } catch (e: SecurityException) {
             e.printStackTrace()
+        }
+    }
+
+    fun loadDanmaku(data: ByteArray) {
+        if (data.isEmpty()) return
+        scope.launch(Dispatchers.IO) {
+            try {
+                // Log data size for debug
+                println("Danmaku data size: ${data.size}")
+                val stream = java.io.ByteArrayInputStream(data)
+                // 🔥 创建解析器
+                val parser = com.android.purebilibili.core.util.BiliDanmakuParser().apply {
+                    load(com.android.purebilibili.core.util.StreamDataSource(stream))
+                }
+
+                // 🔥 在主线程绑定到 View
+                launch(Dispatchers.Main) {
+                    danmakuView.prepare(parser, DanmakuContext.create().apply {
+                        setDanmakuStyle(0, 3f)
+                        isDuplicateMergingEnabled = true
+                        setScrollSpeedFactor(1.2f)
+                        setScaleTextSize(1.0f)
+                    })
+                    if (isDanmakuOn) {
+                        danmakuView.show()
+                        // 稍微延迟以确保同步
+                        delay(200)
+                        danmakuView.start(player.currentPosition)
+                    }
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
         }
     }
 }
@@ -195,9 +233,12 @@ fun rememberVideoPlayerState(
         }
     }
     val danmakuView = remember(context) { DanmakuView(context) }
+    
+    // 🔥 性能优化：使用 rememberCoroutineScope 创建受管理的协程作用域
+    val scope = rememberCoroutineScope()
 
-    val holder = remember(player, danmakuView, mediaSession) {
-        VideoPlayerState(context, player, danmakuView, mediaSession)
+    val holder = remember(player, danmakuView, mediaSession, scope) {
+        VideoPlayerState(context, player, danmakuView, mediaSession, scope)
     }
 
     val uiState by viewModel.uiState.collectAsState()
@@ -223,6 +264,16 @@ fun rememberVideoPlayerState(
 
     LaunchedEffect(bvid) { viewModel.loadVideo(bvid) }
     LaunchedEffect(player) { viewModel.attachPlayer(player) }
+    
+    // 🔥 监听弹幕流并在加载后初始化弹幕
+    LaunchedEffect(uiState) {
+        if (uiState is PlayerUiState.Success) {
+            val state = uiState as PlayerUiState.Success
+            if (state.danmakuData != null) {
+                holder.loadDanmaku(state.danmakuData)
+            }
+        }
+    }
 
     LaunchedEffect(player.isPlaying) {
         while (true) {

@@ -23,17 +23,17 @@ import com.android.purebilibili.core.theme.BiliPink
 import com.android.purebilibili.data.model.response.ReplyItem
 
 @Composable
-fun SubReplyOverlay(
-    uiState: PlayerUiState,
-    subReplyState: SubReplyUiState,
-    onClose: () -> Unit,
+fun SubReplySheet(
+    state: SubReplyUiState,
+    emoteMap: Map<String, String>,
+    onDismiss: () -> Unit,
     onLoadMore: () -> Unit
 ) {
     // 🔥 必须用 Box 包裹，否则 align 报错
     Box(modifier = Modifier.fillMaxSize()) {
 
         AnimatedVisibility(
-            visible = subReplyState.visible,
+            visible = state.visible,
             enter = fadeIn(),
             exit = fadeOut(),
             modifier = Modifier.fillMaxSize()
@@ -45,12 +45,12 @@ fun SubReplyOverlay(
                     .clickable(
                         interactionSource = remember { MutableInteractionSource() },
                         indication = null
-                    ) { onClose() }
+                    ) { onDismiss() }
             )
         }
 
         AnimatedVisibility(
-            visible = subReplyState.visible && subReplyState.rootReply != null,
+            visible = state.visible && state.rootReply != null,
             enter = slideInVertically { it } + fadeIn(),
             exit = slideOutVertically { it } + fadeOut(),
             modifier = Modifier.align(Alignment.BottomCenter) // 🔥 这里的 align 依赖外层的 BoxScope
@@ -63,13 +63,13 @@ fun SubReplyOverlay(
                     .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) {},
                 color = MaterialTheme.colorScheme.background
             ) {
-                if (subReplyState.rootReply != null) {
+                if (state.rootReply != null) {
                     SubReplyList(
-                        rootReply = subReplyState.rootReply!!,
-                        subReplies = subReplyState.items,
-                        isLoading = subReplyState.isLoading,
-                        isEnd = subReplyState.isEnd,
-                        emoteMap = (uiState as? PlayerUiState.Success)?.emoteMap ?: emptyMap(),
+                        rootReply = state.rootReply!!,
+                        subReplies = state.items,
+                        isLoading = state.isLoading,
+                        isEnd = state.isEnd,
+                        emoteMap = emoteMap,
                         onLoadMore = onLoadMore
                     )
                 }

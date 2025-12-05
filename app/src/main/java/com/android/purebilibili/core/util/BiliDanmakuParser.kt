@@ -55,10 +55,11 @@ class BiliDanmakuParser : BaseDanmakuParser() {
 
                     item = mContext.mDanmakuFactory.createDanmaku(itemType, mContext)?.apply {
                         this.time = time
-                        this.textSize = textSize * (mContext.displayer.density - 0.6f)
+                        this.textSize = textSize * (mContext.displayer.density)
                         this.textColor = color
                         this.textShadowColor = -0x1000000
                         this.index = this@XmlHandler.index++
+                        this.flags = mContext?.mGlobalFlagValues
                     }
                 }
             }

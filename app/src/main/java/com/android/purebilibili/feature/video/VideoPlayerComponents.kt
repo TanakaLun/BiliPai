@@ -3,6 +3,7 @@ package com.android.purebilibili.feature.video
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -15,6 +16,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -191,25 +193,29 @@ fun ActionButtonsRow(info: ViewInfo, onCommentClick: () -> Unit) {
             // 点赞
             ActionButton(
                 icon = Icons.Outlined.ThumbUp,
-                text = FormatUtils.formatStat(info.stat.like.toLong())
+                text = FormatUtils.formatStat(info.stat.like.toLong()),
+                iconSize = 26.dp
             )
 
             // 投币
             ActionButton(
                 icon = Icons.Default.MonetizationOn,
-                text = "投币"
+                text = "投币",
+                iconSize = 26.dp
             )
 
             // 收藏
             ActionButton(
                 icon = Icons.Outlined.Star,
-                text = "收藏"
+                text = "收藏",
+                iconSize = 26.dp
             )
 
             // 分享
             ActionButton(
                 icon = Icons.Outlined.Share,
-                text = "分享"
+                text = "分享",
+                iconSize = 26.dp
             )
 
             // 评论
@@ -217,38 +223,74 @@ fun ActionButtonsRow(info: ViewInfo, onCommentClick: () -> Unit) {
             ActionButton(
                 icon = Icons.Outlined.Comment,
                 text = if (replyCount > 0) FormatUtils.formatStat(replyCount.toLong()) else "评论",
-                onClick = onCommentClick
+                onClick = onCommentClick,
+                iconSize = 26.dp
             )
         }
     }
 }
 
+// 🔥 优化版 ActionButton - 带按压动画和更好的视觉效果
 @Composable
 fun ActionButton(
     icon: ImageVector,
     text: String,
     isActive: Boolean = false,
+    iconSize: androidx.compose.ui.unit.Dp = 24.dp,
     onClick: () -> Unit = {}
 ) {
+    // 🔥 按压动画状态
+    val interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+    val isPressed by interactionSource.collectIsPressedAsState()
+    
+    val scale by androidx.compose.animation.core.animateFloatAsState(
+        targetValue = if (isPressed) 0.85f else 1f,
+        animationSpec = androidx.compose.animation.core.spring(
+            dampingRatio = androidx.compose.animation.core.Spring.DampingRatioMediumBouncy,
+            stiffness = androidx.compose.animation.core.Spring.StiffnessLow
+        ),
+        label = "scale"
+    )
+    
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = Modifier
             .padding(vertical = 4.dp)
-            .bouncyClickable { onClick() }
             .width(64.dp)
+            .graphicsLayer {
+                scaleX = scale
+                scaleY = scale
+            }
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null
+            ) { onClick() }
     ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = null,
-            tint = if (isActive) BiliPink else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-            modifier = Modifier.size(24.dp)
-        )
+        // 🔥 图标容器 - 添加微妙的背景
+        Box(
+            modifier = Modifier
+                .size(44.dp)
+                .clip(CircleShape)
+                .background(
+                    if (isActive) BiliPink.copy(alpha = 0.1f) 
+                    else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+                ),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = if (isActive) BiliPink else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f),
+                modifier = Modifier.size(iconSize)
+            )
+        }
         Spacer(modifier = Modifier.height(6.dp))
         Text(
             text = text,
-            fontSize = 12.sp,
-            color = if (isActive) BiliPink else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
-            fontWeight = if (isActive) FontWeight.Medium else FontWeight.Normal
+            fontSize = 11.sp,
+            color = if (isActive) BiliPink else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.85f),
+            fontWeight = if (isActive) FontWeight.SemiBold else FontWeight.Normal,
+            maxLines = 1
         )
     }
 }
@@ -379,6 +421,40 @@ fun RelatedVideoItem(video: RelatedVideo, onClick: () -> Unit) {
                         modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                     )
                 }
+                
+                // 🔥 播放量遮罩
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(28.dp)
+                        .align(Alignment.BottomCenter)
+                        .background(
+                            androidx.compose.ui.graphics.Brush.verticalGradient(
+                                colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.6f))
+                            )
+                        )
+                )
+                
+                // 播放量标签
+                Row(
+                    modifier = Modifier
+                        .align(Alignment.BottomStart)
+                        .padding(6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        Icons.Filled.PlayArrow,
+                        contentDescription = null,
+                        tint = Color.White.copy(alpha = 0.9f),
+                        modifier = Modifier.size(12.dp)
+                    )
+                    Spacer(modifier = Modifier.width(2.dp))
+                    Text(
+                        text = FormatUtils.formatStat(video.stat.view.toLong()),
+                        color = Color.White.copy(alpha = 0.9f),
+                        fontSize = 10.sp
+                    )
+                }
             }
 
             Spacer(modifier = Modifier.width(12.dp))
@@ -403,20 +479,31 @@ fun RelatedVideoItem(video: RelatedVideo, onClick: () -> Unit) {
                     color = MaterialTheme.colorScheme.onBackground
                 )
 
-                // UP主和数据
-                Column {
+                // UP主信息行 🔥 优化样式
+                Row(
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // UP主头标
+                    Surface(
+                        color = BiliPink.copy(alpha = 0.1f),
+                        shape = RoundedCornerShape(4.dp)
+                    ) {
+                        Text(
+                            text = "UP",
+                            fontSize = 9.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = BiliPink,
+                            modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(4.dp))
                     Text(
                         text = video.owner.name,
                         style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                        fontSize = 12.sp
-                    )
-                    Spacer(modifier = Modifier.height(2.dp))
-                    Text(
-                        text = "${FormatUtils.formatStat(video.stat.view.toLong())}播放",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-                        fontSize = 11.sp
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
+                        fontSize = 12.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                 }
             }

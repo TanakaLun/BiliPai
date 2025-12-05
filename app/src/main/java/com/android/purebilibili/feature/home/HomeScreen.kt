@@ -23,6 +23,11 @@ import androidx.core.view.WindowCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.android.purebilibili.core.theme.BiliPink
 import com.android.purebilibili.feature.settings.GITHUB_URL
+// 🔥 从 components 包导入拆分后的组件
+import com.android.purebilibili.feature.home.components.BottomNavItem
+import com.android.purebilibili.feature.home.components.ElegantVideoCard
+import com.android.purebilibili.feature.home.components.FluidHomeTopBar
+import com.android.purebilibili.feature.home.components.FrostedBottomBar
 
 @SuppressLint("UnusedMaterial3ScaffoldPaddingParameter")
 @OptIn(ExperimentalMaterial3Api::class)
@@ -65,9 +70,15 @@ fun HomeScreen(
     // 内容的 Padding：状态栏 + TopBar(64) + 间距
     val topBarHeight = 64.dp
     val contentTopPadding = statusBarHeight + topBarHeight + 16.dp
+    
+    // 🔥 底部导航栏高度
+    val bottomBarHeight = 56.dp + navBarHeight
 
     val prefs = remember { context.getSharedPreferences("app_prefs", Context.MODE_PRIVATE) }
     var showWelcomeDialog by remember { mutableStateOf(false) }
+    
+    // 🔥 当前选中的导航项
+    var currentNavItem by remember { mutableStateOf(BottomNavItem.HOME) }
 
     LaunchedEffect(Unit) {
         if (prefs.getBoolean("is_first_run", true)) showWelcomeDialog = true
@@ -114,7 +125,7 @@ fun HomeScreen(
                         start = 16.dp,
                         end = 16.dp,
                         top = contentTopPadding,
-                        bottom = navBarHeight + 20.dp
+                        bottom = bottomBarHeight + 20.dp  // 🔥 底部为导航栏高度
                     ),
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                     verticalArrangement = Arrangement.spacedBy(16.dp),
@@ -147,12 +158,27 @@ fun HomeScreen(
                 onSearchClick = onSearchClick
             )
 
-            // 3. 顶层：刷新指示器 (🔥 修复：不加 padding，让它从屏幕最顶部滑下来，覆盖在顶栏之上)
+            // 3. 顶层：刷新指示器
             PullToRefreshContainer(
                 state = pullRefreshState,
                 modifier = Modifier.align(Alignment.TopCenter),
-                containerColor = MaterialTheme.colorScheme.surface, // 白色背景
+                containerColor = MaterialTheme.colorScheme.surface,
                 contentColor = BiliPink
+            )
+            
+            // 4. 🔥 底部导航栏 (iOS 风格毛玻璃)
+            FrostedBottomBar(
+                currentItem = currentNavItem,
+                onItemClick = { item ->
+                    currentNavItem = item
+                    when (item) {
+                        BottomNavItem.HOME -> { /* 已在首页 */ }
+                        BottomNavItem.DYNAMIC -> { /* TODO: 跳转动态页 */ }
+                        BottomNavItem.DISCOVER -> { /* TODO: 跳转发现页 */ }
+                        BottomNavItem.PROFILE -> onProfileClick()
+                    }
+                },
+                modifier = Modifier.align(Alignment.BottomCenter)
             )
         }
     }

@@ -21,6 +21,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.zIndex
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -228,7 +229,7 @@ fun VideoPlayerSection(
                     }
                     view
                 },
-                modifier = Modifier.fillMaxSize()
+                modifier = Modifier.fillMaxSize().zIndex(1f)
             )
         }
 
@@ -292,6 +293,7 @@ fun VideoPlayerSection(
                 isDanmakuOn = playerState.isDanmakuOn,
                 currentQualityLabel = uiState.qualityLabels.getOrNull(uiState.qualityIds.indexOf(uiState.currentQuality)) ?: "自动",
                 qualityLabels = uiState.qualityLabels,
+                qualityIds = uiState.qualityIds, // 🔥 传入清晰度ID列表
                 onQualitySelected = { index ->
                     val id = uiState.qualityIds.getOrNull(index) ?: 0
                     onQualityChange(id, playerState.player.currentPosition)
@@ -302,7 +304,10 @@ fun VideoPlayerSection(
 
                 // 🔥🔥 [关键] 传入设置状态和真实分辨率字符串
                 showStats = showStats,
-                realResolution = realResolution
+                realResolution = realResolution,
+                // 🔥🔥 [新增] 传入清晰度切换状态
+                isQualitySwitching = uiState.isQualitySwitching,
+                isLoggedIn = uiState.isLoggedIn
             )
         }
     }

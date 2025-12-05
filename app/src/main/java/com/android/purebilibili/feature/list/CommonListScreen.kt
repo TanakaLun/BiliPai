@@ -17,7 +17,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.android.purebilibili.core.theme.BiliPink
 import com.android.purebilibili.core.util.VideoGridItemSkeleton
-import com.android.purebilibili.feature.home.VideoGridItem // 导入别名函数
+import com.android.purebilibili.feature.home.components.ElegantVideoCard
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -81,11 +81,10 @@ fun CommonListScreen(
                     modifier = Modifier.fillMaxSize()
                 ) {
                     itemsIndexed(state.items) { index, video ->
-                        // 修复：传入 index
-                        VideoGridItem(
+                        ElegantVideoCard(
                             video = video,
                             index = index,
-                            onClick = onVideoClick
+                            onClick = { bvid, cid -> onVideoClick(bvid, cid) }
                         )
                     }
                 }

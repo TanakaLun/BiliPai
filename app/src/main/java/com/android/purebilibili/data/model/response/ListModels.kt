@@ -13,7 +13,10 @@ data class VideoItem(
     val owner: Owner = Owner(),
     val stat: Stat = Stat(),
     // 🔥 关键修复：补全时长字段，解决 HomeScreen 报错
-    val duration: Int = 0
+    val duration: Int = 0,
+    // 🔥 新增：历史记录进度字段
+    val progress: Int = -1,
+    val view_at: Long = 0
 )
 
 @Serializable
@@ -36,12 +39,15 @@ data class Stat(
 data class HistoryData(
     val title: String = "",
     val pic: String = "", // 历史记录接口返回的封面字段是 pic
+    val cover: String = "", // 🔥 有时接口返回 cover
     val author_name: String = "",
     val author_face: String = "",
     val duration: Int = 0,
     // 历史记录的 BVID 藏在 history 对象里
     val history: HistoryPage? = null,
-    val stat: Stat = Stat() // 历史接口有时包含 stat
+    val stat: Stat? = null, // 🔥 stat 可能为空
+    val progress: Int = -1, // 观看进度
+    val view_at: Long = 0 // 观看时间戳
 ) {
     // 转换函数：转为通用 VideoItem
     fun toVideoItem(): VideoItem {
@@ -49,10 +55,14 @@ data class HistoryData(
             id = history?.oid ?: 0,
             bvid = history?.bvid ?: "",
             title = title,
-            pic = pic,
+            pic = if (cover.isNotEmpty()) cover else pic, // 🔥 优先使用 cover
             owner = Owner(name = author_name, face = author_face),
-            stat = stat,
-            duration = duration
+            // 🔥 如果 stat 为空或 view 用 0，尝试隐式处理，但这里我们无法伪造数据。
+            // 至少确保不会因为 null 崩溃。
+            stat = stat ?: Stat(), 
+            duration = duration,
+            progress = progress,
+            view_at = view_at
         )
     }
 }

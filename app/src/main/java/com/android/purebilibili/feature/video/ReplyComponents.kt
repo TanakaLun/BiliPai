@@ -1,7 +1,6 @@
 package com.android.purebilibili.feature.video
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
@@ -9,7 +8,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.InlineTextContent
 import androidx.compose.foundation.text.appendInlineContent
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.ChatBubbleOutline   // 正确图标
+import androidx.compose.material.icons.outlined.ChatBubbleOutline
 import androidx.compose.material.icons.outlined.ThumbUp
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -29,25 +28,30 @@ import com.android.purebilibili.data.model.response.ReplyItem
 import java.text.SimpleDateFormat
 import java.util.*
 
+// 🔥 优化后的颜色常量
+private val SubReplyBgColor = Color(0xFFF7F8FA)  // 更浅的子评论背景
+private val TextSecondaryColor = Color(0xFF9499A0)  // 统一次要文字颜色
+private val TextTertiaryColor = Color(0xFFB2B7BF)   // 更浅的辅助文字
+
 @Composable
 fun ReplyHeader(count: Int) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 12.dp),
-        verticalAlignment = Alignment.Bottom
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
         Text(
             text = "评论",
-            style = MaterialTheme.typography.titleMedium,
+            fontSize = 16.sp,
             fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.onSurface
         )
         Spacer(modifier = Modifier.width(8.dp))
         Text(
             text = FormatUtils.formatStat(count.toLong()),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+            fontSize = 14.sp,
+            color = TextSecondaryColor
         )
     }
 }
@@ -68,10 +72,12 @@ fun ReplyItemView(
     Column(
         modifier = Modifier
             .fillMaxWidth()
+            .background(MaterialTheme.colorScheme.background)
             .clickable { onClick() }
-            .padding(horizontal = 16.dp, vertical = 12.dp)
+            .padding(horizontal = 16.dp, vertical = 14.dp)
     ) {
         Row(modifier = Modifier.fillMaxWidth()) {
+            // 头像
             AsyncImage(
                 model = ImageRequest.Builder(LocalContext.current)
                     .data(FormatUtils.fixImageUrl(item.member.avatar))
@@ -79,105 +85,119 @@ fun ReplyItemView(
                     .build(),
                 contentDescription = null,
                 modifier = Modifier
-                    .size(36.dp)
+                    .size(40.dp)
                     .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.surfaceVariant)
+                    .background(Color(0xFFE5E6EB))
             )
             Spacer(modifier = Modifier.width(12.dp))
 
             Column(modifier = Modifier.weight(1f)) {
-                // 用户名 + 等级
+                // 🔥 用户名 + 等级 - 统一颜色风格
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
                         text = item.member.uname,
                         fontSize = 13.sp,
                         fontWeight = FontWeight.Medium,
+                        // 🔥 VIP 用户使用粉色，普通用户使用深灰色，不再使用 onSurface
                         color = if (item.member.vip?.vipStatus == 1) BiliPink
-                        else MaterialTheme.colorScheme.onSurface
+                        else Color(0xFF61666D)
                     )
                     Spacer(modifier = Modifier.width(6.dp))
+                    // 🔥 优化后的等级标签
                     LevelTag(level = item.member.levelInfo.currentLevel)
                 }
-                Spacer(modifier = Modifier.height(4.dp))
+                
+                Spacer(modifier = Modifier.height(6.dp))
 
                 // 正文
                 EmojiText(
                     text = item.content.message,
-                    fontSize = 14.sp,
-                    color = MaterialTheme.colorScheme.onSurface,
+                    fontSize = 15.sp,
+                    color = Color(0xFF18191C),  // 🔥 更深的正文颜色
                     emoteMap = localEmoteMap
                 )
 
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(10.dp))
 
-                // 时间 + 点赞 + 回复
+                // 🔥 时间 + 点赞 + 回复 - 统一使用浅灰色
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
                         text = formatTime(item.ctime),
-                        fontSize = 11.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        fontSize = 12.sp,
+                        color = TextSecondaryColor
                     )
-                    Spacer(modifier = Modifier.width(16.dp))
+                    Spacer(modifier = Modifier.width(20.dp))
 
                     Icon(
                         imageVector = Icons.Outlined.ThumbUp,
                         contentDescription = "点赞",
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(16.dp)
+                        tint = TextSecondaryColor,
+                        modifier = Modifier.size(14.dp)
                     )
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text(
-                        text = if (item.like <= 0) "" else FormatUtils.formatStat(item.like.toLong()),
-                        fontSize = 11.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                    if (item.like > 0) {
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = FormatUtils.formatStat(item.like.toLong()),
+                            fontSize = 12.sp,
+                            color = TextSecondaryColor
+                        )
+                    }
 
-                    Spacer(modifier = Modifier.width(16.dp))
+                    Spacer(modifier = Modifier.width(20.dp))
 
                     Icon(
                         imageVector = Icons.Outlined.ChatBubbleOutline,
                         contentDescription = "回复",
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        tint = TextSecondaryColor,
                         modifier = Modifier
-                            .size(16.dp)
+                            .size(14.dp)
                             .clickable { onSubClick(item) }
                     )
                 }
 
-                // 楼中楼预览
+                // 🔥 楼中楼预览 - 使用更浅的背景色
                 if (!item.replies.isNullOrEmpty() || item.rcount > 0) {
-                    Spacer(modifier = Modifier.height(8.dp))
+                    Spacer(modifier = Modifier.height(10.dp))
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
                             .background(
-                                color = MaterialTheme.colorScheme.surfaceColorAtElevation(4.dp),
+                                color = SubReplyBgColor,
                                 shape = RoundedCornerShape(8.dp)
                             )
-                            .padding(10.dp)
+                            .clip(RoundedCornerShape(8.dp))
                             .clickable { onSubClick(item) }
+                            .padding(12.dp)
                     ) {
                         item.replies?.take(3)?.forEach { subReply ->
-                            Row {
+                            Row(modifier = Modifier.padding(vertical = 2.dp)) {
+                                // 🔥 子评论用户名 - 使用统一的深灰色，不再用蓝色
                                 Text(
-                                    text = "${subReply.member.uname}: ",
-                                    fontSize = 12.sp,
-                                    color = MaterialTheme.colorScheme.primary,
+                                    text = subReply.member.uname,
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    color = Color(0xFF61666D)
+                                )
+                                Text(
+                                    text = ": ",
+                                    fontSize = 13.sp,
+                                    color = Color(0xFF61666D)
+                                )
+                                // 子评论内容
+                                Text(
+                                    text = subReply.content.message,
+                                    fontSize = 13.sp,
+                                    color = Color(0xFF18191C),
+                                    maxLines = 2,
                                     lineHeight = 18.sp
                                 )
-                                EmojiText(
-                                    text = subReply.content.message,
-                                    fontSize = 12.sp,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    emoteMap = localEmoteMap
-                                )
                             }
-                            Spacer(modifier = Modifier.height(4.dp))
                         }
                         if (item.rcount > 0) {
+                            Spacer(modifier = Modifier.height(4.dp))
                             Text(
                                 text = "共${item.rcount}条回复 >",
-                                fontSize = 12.sp,
+                                fontSize = 13.sp,
                                 color = BiliPink,
                                 fontWeight = FontWeight.Medium
                             )
@@ -186,13 +206,14 @@ fun ReplyItemView(
                 }
             }
         }
-
-        HorizontalDivider(
-            thickness = 0.5.dp,
-            color = MaterialTheme.colorScheme.outline.copy(alpha = 0.6f),
-            modifier = Modifier.padding(top = 12.dp)
-        )
     }
+    
+    // 🔥 分割线 - 更细更浅
+    HorizontalDivider(
+        thickness = 0.5.dp,
+        color = Color(0xFFE5E6EB),
+        modifier = Modifier.padding(start = 68.dp)  // 对齐头像右边
+    )
 }
 
 @Composable
@@ -203,7 +224,7 @@ fun EmojiText(
     emoteMap: Map<String, String>
 ) {
     val annotatedString = buildAnnotatedString {
-        // 高亮 “回复 @某人 :”
+        // 高亮 "回复 @某人 :"
         val replyPattern = "^回复 @(.*?) :".toRegex()
         val replyMatch = replyPattern.find(text)
         var startIndex = 0
@@ -215,7 +236,6 @@ fun EmojiText(
         }
 
         val remainingText = text.substring(startIndex)
-        // 原始字符串写法，无警告
         val emotePattern = """\[(.*?)\]""".toRegex()
         var lastIndex = 0
         emotePattern.findAll(remainingText).forEach { matchResult ->
@@ -257,16 +277,28 @@ fun EmojiText(
     )
 }
 
+// 🔥 优化后的等级标签 - 无边框，使用柔和的背景色
 @Composable
 fun LevelTag(level: Int) {
-    Text(
-        text = "LV$level",
-        fontSize = 8.sp,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier
-            .border(0.5.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(2.dp))
-            .padding(horizontal = 3.dp, vertical = 1.dp)
-    )
+    // 根据等级设置不同颜色
+    val (bgColor, textColor) = when {
+        level >= 6 -> Color(0xFFFFF1F1) to BiliPink
+        level >= 4 -> Color(0xFFFFF8E6) to Color(0xFFFF9500)
+        else -> Color(0xFFF4F5F7) to Color(0xFF9499A0)
+    }
+    
+    Surface(
+        color = bgColor,
+        shape = RoundedCornerShape(3.dp)
+    ) {
+        Text(
+            text = "LV$level",
+            fontSize = 9.sp,
+            fontWeight = FontWeight.Bold,
+            color = textColor,
+            modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
+        )
+    }
 }
 
 fun formatTime(timestamp: Long): String {

@@ -21,6 +21,7 @@ import kotlinx.coroutines.withContext
 sealed class LoginState {
     object Loading : LoginState()
     data class QrCode(val bitmap: Bitmap) : LoginState()
+    data class Scanned(val bitmap: Bitmap) : LoginState() // 🔥 新增: 已扫描待确认状态
     object Success : LoginState()
     data class Error(val msg: String) : LoginState()
 }
@@ -50,6 +51,7 @@ class LoginViewModel(application: Application) : AndroidViewModel(application) {
 
                 Log.d("LoginDebug", "2. 二维码获取成功 Key: $qrcodeKey")
                 val bitmap = generateQrBitmap(url)
+                currentBitmap = bitmap // 🔥 保存以便在 Scanned 状态使用
                 _state.value = LoginState.QrCode(bitmap)
 
                 startPolling()
@@ -60,11 +62,13 @@ class LoginViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    private var currentBitmap: Bitmap? = null // 🔥 保存当前二维码用于 Scanned 状态
+
     private fun startPolling() {
         viewModelScope.launch {
             Log.d("LoginDebug", "3. 开始轮询...")
             while (isPolling) {
-                delay(3000)
+                delay(2000) // 🔥 缩短轮询间隔，更快响应
                 try {
                     val response = NetworkModule.passportApi.pollQrCode(qrcodeKey)
                     val body = response.body()
@@ -74,42 +78,60 @@ class LoginViewModel(application: Application) : AndroidViewModel(application) {
 
                     Log.d("LoginDebug", "轮询状态: Code=$code")
 
-                    if (code == 0) {
-                        Log.d("LoginDebug", ">>> 登录成功！开始解析 Cookie <<<")
+                    when (code) {
+                        0 -> {
+                            // 🔥 登录成功
+                            Log.d("LoginDebug", ">>> 登录成功！开始解析 Cookie <<<")
 
-                        val cookies = response.headers().values("Set-Cookie")
-                        var sessData = ""
+                            val cookies = response.headers().values("Set-Cookie")
+                            var sessData = ""
 
-                        for (line in cookies) {
-                            if (line.contains("SESSDATA")) {
-                                val parts = line.split(";")
-                                for (part in parts) {
-                                    val trimPart = part.trim()
-                                    if (trimPart.startsWith("SESSDATA=")) {
-                                        sessData = trimPart.substringAfter("SESSDATA=")
-                                        break
+                            for (line in cookies) {
+                                if (line.contains("SESSDATA")) {
+                                    val parts = line.split(";")
+                                    for (part in parts) {
+                                        val trimPart = part.trim()
+                                        if (trimPart.startsWith("SESSDATA=")) {
+                                            sessData = trimPart.substringAfter("SESSDATA=")
+                                            break
+                                        }
                                     }
                                 }
+                                if (sessData.isNotEmpty()) break
                             }
-                            if (sessData.isNotEmpty()) break
+
+                            if (sessData.isNotEmpty()) {
+                                Log.d("LoginDebug", "✅ 成功提取 SESSDATA: $sessData")
+
+                                // 保存并更新缓存
+                                TokenManager.saveCookies(getApplication(), sessData)
+
+                                isPolling = false
+                                withContext(Dispatchers.Main) {
+                                    _state.value = LoginState.Success
+                                }
+                            } else {
+                                _state.value = LoginState.Error("Cookie 解析失败")
+                            }
                         }
-
-                        if (sessData.isNotEmpty()) {
-                            Log.d("LoginDebug", "✅ 成功提取 SESSDATA: $sessData")
-
-                            // 保存并更新缓存
-                            TokenManager.saveCookies(getApplication(), sessData)
-
+                        86090 -> {
+                            // 🔥 新增: 已扫描待确认
+                            Log.d("LoginDebug", "📱 二维码已扫描，等待确认...")
+                            currentBitmap?.let { bitmap ->
+                                withContext(Dispatchers.Main) {
+                                    _state.value = LoginState.Scanned(bitmap)
+                                }
+                            }
+                        }
+                        86038 -> {
+                            // 二维码已过期
+                            _state.value = LoginState.Error("二维码已过期，请刷新")
                             isPolling = false
-                            withContext(Dispatchers.Main) {
-                                _state.value = LoginState.Success
-                            }
-                        } else {
-                            _state.value = LoginState.Error("Cookie 解析失败")
                         }
-                    } else if (code == 86038) {
-                        _state.value = LoginState.Error("二维码已过期")
-                        isPolling = false
+                        86101 -> {
+                            // 未扫描，继续轮询
+                            Log.d("LoginDebug", "等待扫描...")
+                        }
                     }
                 } catch (e: Exception) {
                     Log.e("LoginDebug", "轮询异常", e)

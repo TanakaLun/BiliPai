@@ -405,13 +405,16 @@ fun SettingsSectionTitle(title: String) {
 
 @Composable
 fun SettingsGroup(content: @Composable ColumnScope.() -> Unit) {
-    Column(
+    Surface(
         modifier = Modifier
             .padding(horizontal = 16.dp)
-            .clip(RoundedCornerShape(16.dp))
-            .background(MaterialTheme.colorScheme.surface),
-        content = content
-    )
+            .clip(RoundedCornerShape(16.dp)),
+        color = MaterialTheme.colorScheme.surface,
+        shadowElevation = 1.dp,  // 🔥 微阴影增加层次感
+        tonalElevation = 1.dp    // 🔥 Material3 色调提升
+    ) {
+        Column(content = content)
+    }
 }
 
 @Composable
@@ -449,7 +452,7 @@ fun SettingSwitchItem(
                 uncheckedThumbColor = MaterialTheme.colorScheme.outline,
                 uncheckedTrackColor = MaterialTheme.colorScheme.surfaceVariant
             ),
-            modifier = Modifier.scale(0.8f)
+            modifier = Modifier.scale(0.9f)  // 🔥 调整为 0.9f 更平衡
         )
     }
 }

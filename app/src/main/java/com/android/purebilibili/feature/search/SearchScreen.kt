@@ -1,7 +1,11 @@
 // 文件路径: feature/search/SearchScreen.kt
 package com.android.purebilibili.feature.search
 
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -28,6 +32,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalDensity
@@ -39,7 +44,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.android.purebilibili.core.database.entity.SearchHistory
 import com.android.purebilibili.core.theme.BiliPink
-import com.android.purebilibili.feature.home.VideoGridItem
+import com.android.purebilibili.feature.home.components.VideoGridItem
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -94,7 +99,7 @@ fun SearchScreen(
                         modifier = Modifier.fillMaxSize()
                     ) {
                         itemsIndexed(state.searchResults) { index, video ->
-                            VideoGridItem(video, index, onVideoClick)
+                            VideoGridItem(video, index) { bvid -> onVideoClick(bvid, 0) }
                         }
                     }
                 }
@@ -124,13 +129,38 @@ fun SearchScreen(
                     }
                     if (state.historyList.isNotEmpty()) {
                         item {
-                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                                Text("历史记录", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
-                                TextButton(onClick = { viewModel.clearHistory() }) { Text("清空", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp) }
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    "历史记录",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                TextButton(onClick = { viewModel.clearHistory() }) {
+                                    Text("清空", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
+                                }
                             }
+                            Spacer(modifier = Modifier.height(8.dp))
                         }
-                        items(state.historyList) { history ->
-                            HistoryItem(history, { viewModel.search(history.keyword); keyboardController?.hide() }, { viewModel.deleteHistory(history) })
+                        
+                        // 🔥 气泡化历史记录
+                        item {
+                            FlowRow(
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalArrangement = Arrangement.spacedBy(10.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                state.historyList.forEach { history ->
+                                    HistoryChip(
+                                        keyword = history.keyword,
+                                        onClick = { viewModel.search(history.keyword); keyboardController?.hide() },
+                                        onDelete = { viewModel.deleteHistory(history) }
+                                    )
+                                }
+                            }
                         }
                     }
                 }
@@ -152,7 +182,7 @@ fun SearchScreen(
     }
 }
 
-// 🔥 新设计的顶部搜索栏
+// 🔥 新设计的顶部搜索栏 (含 Focus 高亮动画)
 @Composable
 fun SearchTopBar(
     query: String,
@@ -162,23 +192,38 @@ fun SearchTopBar(
     onClearQuery: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    // 🔥 Focus 状态追踪
+    var isFocused by remember { mutableStateOf(false) }
+    
+    // 🔥 边框宽度动画
+    val borderWidth by animateDpAsState(
+        targetValue = if (isFocused) 2.dp else 0.dp,
+        animationSpec = tween(durationMillis = 200),
+        label = "borderWidth"
+    )
+    
+    // 🔥 搜索图标颜色动画
+    val searchIconColor by animateColorAsState(
+        targetValue = if (isFocused) BiliPink else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+        animationSpec = tween(durationMillis = 200),
+        label = "iconColor"
+    )
+
     Surface(
         modifier = modifier.fillMaxWidth(),
         color = MaterialTheme.colorScheme.surface,
-        shadowElevation = 3.dp // 添加一点阴影区分内容
+        shadowElevation = 3.dp
     ) {
         Column {
-            // 状态栏避让
             Spacer(modifier = Modifier.windowInsetsTopHeight(WindowInsets.statusBars))
 
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(64.dp) // 增加高度以容纳更大的输入框
+                    .height(64.dp)
                     .padding(horizontal = 12.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // 1. 返回按钮
                 IconButton(onClick = onBack) {
                     Icon(
                         Icons.AutoMirrored.Filled.ArrowBack,
@@ -189,12 +234,17 @@ fun SearchTopBar(
 
                 Spacer(modifier = Modifier.width(4.dp))
 
-                // 2. 搜索输入框 (占据中间)
+                // 🔥 搜索输入框 (带 Focus 边框动画)
                 Row(
                     modifier = Modifier
                         .weight(1f)
                         .height(42.dp)
-                        .clip(RoundedCornerShape(50)) // 胶囊圆角
+                        .clip(RoundedCornerShape(50))
+                        .border(
+                            width = borderWidth,
+                            color = BiliPink,
+                            shape = RoundedCornerShape(50)
+                        )
                         .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f))
                         .padding(horizontal = 12.dp),
                     verticalAlignment = Alignment.CenterVertically
@@ -202,7 +252,7 @@ fun SearchTopBar(
                     Icon(
                         Icons.Default.Search,
                         null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                        tint = searchIconColor,
                         modifier = Modifier.size(20.dp)
                     )
 
@@ -211,7 +261,9 @@ fun SearchTopBar(
                     BasicTextField(
                         value = query,
                         onValueChange = onQueryChange,
-                        modifier = Modifier.weight(1f),
+                        modifier = Modifier
+                            .weight(1f)
+                            .onFocusChanged { isFocused = it.isFocused },
                         textStyle = TextStyle(
                             color = MaterialTheme.colorScheme.onSurface,
                             fontSize = 15.sp
@@ -225,7 +277,10 @@ fun SearchTopBar(
                                 if (query.isEmpty()) {
                                     Text(
                                         "搜索视频、UP主...",
-                                        style = TextStyle(color = MaterialTheme.colorScheme.onSurfaceVariant.copy(0.5f), fontSize = 15.sp)
+                                        style = TextStyle(
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(0.5f),
+                                            fontSize = 15.sp
+                                        )
                                     )
                                 }
                                 inner()
@@ -250,10 +305,8 @@ fun SearchTopBar(
 
                 Spacer(modifier = Modifier.width(12.dp))
 
-                // 3. 搜索按钮
                 TextButton(
                     onClick = { onSearch(query) },
-                    // 如果有内容则高亮，无内容则灰色
                     enabled = query.isNotEmpty()
                 ) {
                     Text(
@@ -267,7 +320,54 @@ fun SearchTopBar(
     }
 }
 
-// HistoryItem 保持不变
+// 🔥 气泡化历史记录组件
+@Composable
+fun HistoryChip(
+    keyword: String,
+    onClick: () -> Unit,
+    onDelete: () -> Unit
+) {
+    Surface(
+        onClick = onClick,
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f),
+        shape = RoundedCornerShape(20.dp),
+        tonalElevation = 0.dp
+    ) {
+        Row(
+            modifier = Modifier
+                .height(36.dp)
+                .padding(start = 12.dp, end = 4.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                Icons.Default.History,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(0.6f),
+                modifier = Modifier.size(16.dp)
+            )
+            Spacer(modifier = Modifier.width(6.dp))
+            Text(
+                text = keyword,
+                color = MaterialTheme.colorScheme.onSurface,
+                fontSize = 13.sp,
+                maxLines = 1
+            )
+            IconButton(
+                onClick = onDelete,
+                modifier = Modifier.size(28.dp)
+            ) {
+                Icon(
+                    Icons.Default.Close,
+                    contentDescription = "删除",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(0.5f),
+                    modifier = Modifier.size(14.dp)
+                )
+            }
+        }
+    }
+}
+
+// 保留旧版 HistoryItem 用于兼容 (可选保留)
 @Composable
 fun HistoryItem(
     history: SearchHistory,

@@ -11,6 +11,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.outlined.Lock
+import androidx.compose.material.icons.outlined.Login
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -18,6 +20,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -101,26 +104,104 @@ fun ProfileScreen(
 
 @Composable
 fun GuestProfileContent(onGoToLogin: () -> Unit) {
-    Column(
-        // 🔥 修复：背景色
-        modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(
+                Brush.verticalGradient(
+                    colors = listOf(
+                        Color(0xFF1A1A2E),
+                        Color(0xFF16213E),
+                        Color(0xFF0F0F23)
+                    )
+                )
+            )
     ) {
-        Box(
+        Column(
             modifier = Modifier
-                .size(80.dp)
-                .clip(CircleShape)
-                // 🔥 修复：占位圆颜色
-                .background(MaterialTheme.colorScheme.surfaceVariant)
-                .clickable { onGoToLogin() },
-            contentAlignment = Alignment.Center
+                .fillMaxSize()
+                .padding(horizontal = 32.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
         ) {
-            Text("登录", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 14.sp)
-        }
-        Spacer(modifier = Modifier.height(16.dp))
-        Button(onClick = onGoToLogin, colors = ButtonDefaults.buttonColors(containerColor = BiliPink)) {
-            Text("点击登录 Bilibili", color = Color.White)
+            // Logo
+            Surface(
+                shape = RoundedCornerShape(24.dp),
+                color = BiliPink,
+                shadowElevation = 16.dp,
+                modifier = Modifier.size(100.dp)
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Text(
+                        text = "B",
+                        fontSize = 48.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(32.dp))
+
+            Text(
+                text = "欢迎来到 BiliPai",
+                fontSize = 24.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color.White
+            )
+
+            Text(
+                text = "登录后解锁完整功能",
+                fontSize = 14.sp,
+                color = Color.White.copy(alpha = 0.6f),
+                modifier = Modifier.padding(top = 8.dp)
+            )
+
+            Spacer(modifier = Modifier.height(48.dp))
+
+            // 登录按钮
+            Button(
+                onClick = onGoToLogin,
+                colors = ButtonDefaults.buttonColors(containerColor = BiliPink),
+                shape = RoundedCornerShape(16.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(56.dp),
+                elevation = ButtonDefaults.buttonElevation(defaultElevation = 8.dp)
+            ) {
+                Icon(
+                    Icons.Outlined.Login,
+                    contentDescription = null,
+                    modifier = Modifier.size(20.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    "安全登录",
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.SemiBold
+                )
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // 安全提示
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.alpha(0.5f)
+            ) {
+                Icon(
+                    Icons.Outlined.Lock,
+                    contentDescription = null,
+                    tint = Color.White,
+                    modifier = Modifier.size(14.dp)
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                    text = "支持扫码登录和网页登录",
+                    fontSize = 12.sp,
+                    color = Color.White
+                )
+            }
         }
     }
 }

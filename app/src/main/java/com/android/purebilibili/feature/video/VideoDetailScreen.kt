@@ -9,6 +9,14 @@ import android.content.pm.ActivityInfo
 import android.content.res.Configuration
 import android.view.Window
 import android.view.WindowManager
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.togetherWith
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -25,14 +33,20 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.clickable
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.android.purebilibili.core.theme.BiliPink
+import com.android.purebilibili.core.util.BiliDanmakuParser
+import com.android.purebilibili.core.util.StreamDataSource
 import com.android.purebilibili.data.model.response.RelatedVideo
 import com.android.purebilibili.data.model.response.ReplyItem
 import com.android.purebilibili.data.model.response.ViewInfo
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @SuppressLint("UnusedMaterial3ScaffoldPaddingParameter")
 @Composable
@@ -42,12 +56,17 @@ fun VideoDetailScreen(
     onBack: () -> Unit,
     isInPipMode: Boolean = false,
     isVisible: Boolean = true,
-    viewModel: PlayerViewModel = viewModel()
+    viewModel: PlayerViewModel = viewModel(),
+    commentViewModel: VideoCommentViewModel = viewModel() // 🔥
 ) {
     val context = LocalContext.current
     val view = LocalView.current
     val configuration = LocalConfiguration.current
     val uiState by viewModel.uiState.collectAsState()
+    
+    // 🔥 监听评论状态
+    val commentState by commentViewModel.commentState.collectAsState()
+    val subReplyState by commentViewModel.subReplyState.collectAsState()
 
     val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
 
@@ -71,24 +90,30 @@ fun VideoDetailScreen(
         bvid = bvid
     )
 
-    // 🔥🔥🔥 核心修改：当获取到视频详情 Success 时，更新系统媒体控制中心信息
+    // 🔥🔥🔥 核心修改：初始化评论 & 媒体中心信息
     LaunchedEffect(uiState) {
         if (uiState is PlayerUiState.Success) {
             val info = (uiState as PlayerUiState.Success).info
+            
+            // 初始化评论
+            commentViewModel.init(info.aid)
+            
             playerState.updateMediaMetadata(
                 title = info.title,
                 artist = info.owner.name,
-                coverUrl = info.pic // 或者是 info.cover，根据你的数据模型决定
+                coverUrl = info.pic
             )
         } else if (uiState is PlayerUiState.Loading) {
-            // 加载中也可以先设置个占位标题（可选）
             playerState.updateMediaMetadata(
                 title = "加载中...",
                 artist = "",
-                coverUrl = coverUrl // 从外部传入的封面
+                coverUrl = coverUrl
             )
         }
     }
+    
+    // 🔥🔥🔥 弹幕加载逻辑已移至 VideoPlayerState 内部处理
+    // 避免在此处重复消耗 InputStream
 
     // 辅助函数：切换屏幕方向
     fun toggleOrientation() {
@@ -128,69 +153,99 @@ fun VideoDetailScreen(
             .fillMaxSize()
             .background(if (isLandscape) Color.Black else MaterialTheme.colorScheme.background)
     ) {
-        if (isLandscape) {
-            VideoPlayerSection(
-                playerState = playerState,
-                uiState = uiState,
-                isFullscreen = true,
-                isInPipMode = isPipMode,
-                onToggleFullscreen = { toggleOrientation() },
-                onQualityChange = { qid, pos -> viewModel.changeQuality(qid, pos) },
-                onBack = { toggleOrientation() }
-            )
-        } else {
-            Column(modifier = Modifier.fillMaxSize()) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .aspectRatio(16f / 9f)
-                        .background(Color.Black)
-                ) {
-                    VideoPlayerSection(
-                        playerState = playerState,
-                        uiState = uiState,
-                        isFullscreen = false,
-                        isInPipMode = isPipMode,
-                        onToggleFullscreen = { toggleOrientation() },
-                        onQualityChange = { qid, pos -> viewModel.changeQuality(qid, pos) },
-                        onBack = onBack
+        // 🔥 横竖屏过渡动画
+        AnimatedContent(
+            targetState = isLandscape,
+            transitionSpec = {
+                (fadeIn(animationSpec = tween(300)) + 
+                 scaleIn(initialScale = 0.92f, animationSpec = tween(300)))
+                    .togetherWith(
+                        fadeOut(animationSpec = tween(200)) + 
+                        scaleOut(targetScale = 1.08f, animationSpec = tween(200))
                     )
-                }
-
-                when (uiState) {
-                    is PlayerUiState.Loading -> {
-                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            CircularProgressIndicator(color = BiliPink)
-                        }
-                    }
-
-                    is PlayerUiState.Success -> {
-                        val success = uiState as PlayerUiState.Success
-                        VideoContentSection(
-                            info = success.info,
-                            relatedVideos = success.related,
-                            replies = success.replies,
-                            replyCount = success.replyCount,
-                            emoteMap = success.emoteMap,
-                            isRepliesLoading = success.isRepliesLoading,
-                            onRelatedVideoClick = { vid -> viewModel.loadVideo(vid) }
+            },
+            label = "orientation_transition"
+        ) { targetIsLandscape ->
+            if (targetIsLandscape) {
+                VideoPlayerSection(
+                    playerState = playerState,
+                    uiState = uiState,
+                    isFullscreen = true,
+                    isInPipMode = isPipMode,
+                    onToggleFullscreen = { toggleOrientation() },
+                    onQualityChange = { qid, pos -> viewModel.changeQuality(qid, pos) },
+                    onBack = { toggleOrientation() }
+                )
+            } else {
+                Column(modifier = Modifier.fillMaxSize()) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .aspectRatio(16f / 9f)
+                            .background(Color.Black)
+                    ) {
+                        VideoPlayerSection(
+                            playerState = playerState,
+                            uiState = uiState,
+                            isFullscreen = false,
+                            isInPipMode = isPipMode,
+                            onToggleFullscreen = { toggleOrientation() },
+                            onQualityChange = { qid, pos -> viewModel.changeQuality(qid, pos) },
+                            onBack = onBack
                         )
                     }
 
-                    is PlayerUiState.Error -> {
-                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Text((uiState as PlayerUiState.Error).msg)
-                                Spacer(Modifier.height(16.dp))
-                                Button(
-                                    onClick = { viewModel.loadVideo(bvid) },
-                                    colors = ButtonDefaults.buttonColors(containerColor = BiliPink)
-                                ) { Text("重试") }
+                    when (uiState) {
+                        is PlayerUiState.Loading -> {
+                            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                CircularProgressIndicator(color = BiliPink)
+                            }
+                        }
+
+                        is PlayerUiState.Success -> {
+                            val success = uiState as PlayerUiState.Success
+                            VideoContentSection(
+                                info = success.info,
+                                relatedVideos = success.related,
+                                replies = commentState.replies, // 🔥
+                                replyCount = commentState.replyCount, // 🔥
+                                emoteMap = success.emoteMap,
+                                isRepliesLoading = commentState.isRepliesLoading, // 🔥
+                                onRelatedVideoClick = { vid -> viewModel.loadVideo(vid) },
+                                onSubReplyClick = { commentViewModel.openSubReply(it) }, // 🔥
+                                onLoadMoreReplies = { commentViewModel.loadComments() } // 🔥
+                            )
+                        }
+
+                        is PlayerUiState.Error -> {
+                            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Text((uiState as PlayerUiState.Error).msg)
+                                    Spacer(Modifier.height(16.dp))
+                                    Button(
+                                        onClick = { viewModel.loadVideo(bvid) },
+                                        colors = ButtonDefaults.buttonColors(containerColor = BiliPink)
+                                    ) { Text("重试") }
+                                }
                             }
                         }
                     }
                 }
             }
+        }
+        
+        // 🔥 评论二级弹窗
+        if (subReplyState.visible) {
+            BackHandler {
+                commentViewModel.closeSubReply()
+            }
+            val successState = uiState as? PlayerUiState.Success
+            SubReplySheet(
+                state = subReplyState,
+                emoteMap = successState?.emoteMap ?: emptyMap(),
+                onDismiss = { commentViewModel.closeSubReply() },
+                onLoadMore = { commentViewModel.loadMoreSubReplies() }
+            )
         }
     }
 }
@@ -213,10 +268,13 @@ fun VideoContentSection(
     replyCount: Int,
     emoteMap: Map<String, String>,
     isRepliesLoading: Boolean,
-    onRelatedVideoClick: (String) -> Unit
+    onRelatedVideoClick: (String) -> Unit,
+    onSubReplyClick: (ReplyItem) -> Unit,
+    onLoadMoreReplies: () -> Unit
 ) {
     val listState = rememberLazyListState()
     val coroutineScope = rememberCoroutineScope()
+    // 粗略计算评论区的 Index
     val commentHeaderIndex = 6 + relatedVideos.size + 1
 
     LazyColumn(
@@ -276,16 +334,33 @@ fun VideoContentSection(
                     item = reply,
                     emoteMap = emoteMap,
                     onClick = { },
-                    onSubClick = { }
+                    onSubClick = { onSubReplyClick(reply) } // 🔥 Open sub-reply
                 )
             }
 
+            // 如果还有更多评论
             if (replies.size < replyCount) {
                 item {
-                    Box(modifier = Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
-                        Text("加载更多...", color = BiliPink)
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onLoadMoreReplies() }
+                            .padding(16.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        if (isRepliesLoading) {
+                            CircularProgressIndicator(modifier = Modifier.size(20.dp), color = BiliPink, strokeWidth = 2.dp)
+                        } else {
+                            Text("加载更多评论", color = BiliPink)
+                        }
                     }
                 }
+            } else if (replies.isNotEmpty()) {
+                 item {
+                    Box(modifier = Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
+                         Text("—— end ——", color = Color.Gray, fontSize = 12.sp)
+                    }
+                 }
             }
         }
     }
