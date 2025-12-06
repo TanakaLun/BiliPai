@@ -82,3 +82,45 @@ data class SearchVideoItem(
         }
     }
 }
+
+// --- 3. 🔥 UP主 搜索结果模型 ---
+@Serializable
+data class SearchUpItem(
+    val mid: Long = 0,
+    val uname: String = "",
+    val usign: String = "", // 个性签名
+    val upic: String = "", // 头像
+    val fans: Int = 0, // 粉丝数
+    val videos: Int = 0, // 视频数
+    val level: Int = 0, // 等级
+    val official_verify: SearchOfficialVerify? = null,
+    val is_senior_member: Int = 0 // 是否硬核会员
+) {
+    fun cleanupFields(): SearchUpItem {
+        return this.copy(
+            uname = uname.replace(Regex("<.*?>"), ""),
+            usign = usign.replace(Regex("<.*?>"), ""),
+            upic = if (upic.startsWith("//")) "https:$upic" else upic
+        )
+    }
+}
+
+@Serializable
+data class SearchOfficialVerify(
+    val type: Int = -1, // 0: 个人, 1: 机构, -1: 无
+    val desc: String = ""
+)
+
+// --- 4. 🔥 搜索类型枚举 ---
+enum class SearchType(val value: String, val displayName: String) {
+    VIDEO("video", "视频"),
+    UP("bili_user", "UP主"),
+    BANGUMI("media_bangumi", "番剧"),
+    LIVE("live_room", "直播");
+    
+    companion object {
+        fun fromValue(value: String): SearchType {
+            return entries.find { it.value == value } ?: VIDEO
+        }
+    }
+}

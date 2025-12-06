@@ -34,6 +34,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
@@ -70,12 +71,23 @@ fun SearchScreen(
 
     Scaffold(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
-        containerColor = MaterialTheme.colorScheme.background,
+        containerColor = Color.Transparent,
         // 🔥 移除 bottomBar，搜索栏现在位于顶部 Box 中
     ) { padding ->
         Box(
             modifier = Modifier
                 .fillMaxSize()
+                .background(
+                    Brush.verticalGradient(
+                        colors = listOf(
+                            Color(0xFFFFF5F5), // 淡粉
+                            Color(0xFFFFFAF0), // 淡橙
+                            Color(0xFFFFFFF0), // 淡黄
+                            Color(0xFFF0FFF4), // 淡绿
+                            Color(0xFFEBF8FF)  // 淡蓝
+                        )
+                    )
+                )
                 .padding(padding)
         ) {
             // --- 列表内容层 ---
@@ -112,21 +124,151 @@ fun SearchScreen(
                 ) {
                     if (state.hotList.isNotEmpty()) {
                         item {
-                            Text("大家都在搜", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(bottom = 12.dp), color = MaterialTheme.colorScheme.onSurface)
-                            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                                state.hotList.forEach { hotItem ->
+                            // 🔥 热搜标题
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    "🔥",
+                                    fontSize = 16.sp
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    "热门搜索",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                            }
+                            Spacer(modifier = Modifier.height(12.dp))
+                            
+                            // 🔥 彩虹色热搜列表 (竖向)
+                            val hotColors = listOf(
+                                Color(0xFFFF6B6B), // 红
+                                Color(0xFFFF8E53), // 橙
+                                Color(0xFFFECA57), // 黄
+                                Color(0xFF48BB78), // 绿
+                                Color(0xFF4299E1), // 蓝
+                                Color(0xFF667EEA), // 紫
+                                Color(0xFFED64A6), // 粉
+                                Color(0xFF38B2AC), // 青
+                                Color(0xFFD69E2E), // 金
+                                Color(0xFF9F7AEA)  // 淡紫
+                            )
+                            
+                            Column(
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                state.hotList.take(10).forEachIndexed { index, hotItem ->
+                                    val itemColor = hotColors[index % hotColors.size]
                                     Surface(
-                                        color = MaterialTheme.colorScheme.surfaceVariant,
-                                        shape = RoundedCornerShape(4.dp),
-                                        modifier = Modifier.clickable { viewModel.search(hotItem.keyword); keyboardController?.hide() }
+                                        color = itemColor.copy(alpha = 0.1f),
+                                        shape = RoundedCornerShape(12.dp),
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clickable { viewModel.search(hotItem.keyword); keyboardController?.hide() }
                                     ) {
-                                        Text(hotItem.show_name, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp))
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)
+                                        ) {
+                                            // 排名数字
+                                            Text(
+                                                "${index + 1}",
+                                                fontSize = 14.sp,
+                                                fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                                                color = itemColor,
+                                                modifier = Modifier.width(24.dp)
+                                            )
+                                            Spacer(modifier = Modifier.width(8.dp))
+                                            Text(
+                                                hotItem.show_name,
+                                                fontSize = 14.sp,
+                                                fontWeight = if (index < 3) androidx.compose.ui.text.font.FontWeight.Medium else androidx.compose.ui.text.font.FontWeight.Normal,
+                                                color = itemColor,
+                                                maxLines = 1
+                                            )
+                                        }
                                     }
                                 }
                             }
                             Spacer(modifier = Modifier.height(24.dp))
                         }
                     }
+                    
+                    // 🔥 发现板块
+                    item {
+                        Text(
+                            "💡 发现更多",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                        
+                        // 快捷分类入口
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceEvenly
+                        ) {
+                            QuickCategory(emoji = "🎮", label = "游戏", onClick = { viewModel.search("游戏"); keyboardController?.hide() })
+                            QuickCategory(emoji = "🎵", label = "音乐", onClick = { viewModel.search("音乐"); keyboardController?.hide() })
+                            QuickCategory(emoji = "📺", label = "番剧", onClick = { viewModel.search("番剧"); keyboardController?.hide() })
+                            QuickCategory(emoji = "🎨", label = "绘画", onClick = { viewModel.search("绘画"); keyboardController?.hide() })
+                            QuickCategory(emoji = "📱", label = "科技", onClick = { viewModel.search("科技"); keyboardController?.hide() })
+                        }
+                        Spacer(modifier = Modifier.height(24.dp))
+                    }
+                    
+                    // 🔥 热门推荐关键词 (竖向排列 + 多彩图标)
+                    item {
+                        Text(
+                            "🔖 推荐关键词",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                        
+                        // 每个关键词配一个 emoji 和颜色
+                        val suggestions = listOf(
+                            Triple("🎮", "原神", Color(0xFF48BB78)),      // 绿
+                            Triple("⚔️", "鬼灭之刃", Color(0xFFED8936)),  // 橙
+                            Triple("👑", "王者荣耀", Color(0xFFE53E3E)),  // 红
+                            Triple("📹", "VLOG", Color(0xFF4299E1)),      // 蓝
+                            Triple("🍜", "美食", Color(0xFFD69E2E)),      // 金
+                            Triple("💪", "健身", Color(0xFF38A169)),      // 深绿
+                            Triple("👗", "穿搭", Color(0xFFED64A6)),      // 粉
+                            Triple("💻", "编程教程", Color(0xFF667EEA)), // 紫
+                            Triple("🐱", "猫猫", Color(0xFFF6AD55)),      // 浅橙
+                            Triple("✈️", "旅行", Color(0xFF0BC5EA))      // 青
+                        )
+                        
+                        Column(
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            suggestions.forEach { (emoji, keyword, tintColor) ->
+                                Surface(
+                                    color = tintColor.copy(alpha = 0.1f),
+                                    shape = RoundedCornerShape(12.dp),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable { viewModel.search(keyword); keyboardController?.hide() }
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)
+                                    ) {
+                                        Text(emoji, fontSize = 20.sp)
+                                        Spacer(modifier = Modifier.width(12.dp))
+                                        Text(
+                                            keyword,
+                                            fontSize = 15.sp,
+                                            fontWeight = androidx.compose.ui.text.font.FontWeight.Medium,
+                                            color = tintColor
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(24.dp))
+                    }
+                    
                     if (state.historyList.isNotEmpty()) {
                         item {
                             Row(
@@ -389,4 +531,38 @@ fun HistoryItem(
         }
     }
     HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant, thickness = 0.5.dp)
+}
+
+/**
+ * 🔥 快捷分类入口
+ */
+@Composable
+fun QuickCategory(
+    emoji: String,
+    label: String,
+    onClick: () -> Unit
+) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier
+            .clip(RoundedCornerShape(12.dp))
+            .clickable(onClick = onClick)
+            .padding(8.dp)
+    ) {
+        Surface(
+            modifier = Modifier.size(48.dp),
+            shape = CircleShape,
+            color = MaterialTheme.colorScheme.surfaceVariant
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                Text(emoji, fontSize = 22.sp)
+            }
+        }
+        Spacer(modifier = Modifier.height(6.dp))
+        Text(
+            label,
+            fontSize = 12.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
 }

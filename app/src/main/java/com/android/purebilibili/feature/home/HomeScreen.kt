@@ -10,6 +10,7 @@ import androidx.compose.material3.*
 import androidx.compose.material3.pulltorefresh.PullToRefreshContainer
 import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.runtime.*
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -38,7 +39,9 @@ fun HomeScreen(
     onAvatarClick: () -> Unit,
     onProfileClick: () -> Unit,
     onSettingsClick: () -> Unit,
-    onSearchClick: () -> Unit
+    onSearchClick: () -> Unit,
+    // 🔥 新增：动态页面回调
+    onDynamicClick: () -> Unit = {}
 ) {
     val state by viewModel.uiState.collectAsState()
     val isRefreshing by viewModel.isRefreshing.collectAsState()
@@ -166,19 +169,31 @@ fun HomeScreen(
                 contentColor = BiliPink
             )
             
-            // 4. 🔥 底部导航栏 (iOS 风格毛玻璃)
+            // 4. 🔥 底部导航栏 (视频封面动态取色)
+            // 获取当前可见的第一个视频封面
+            val firstVisibleIndex by remember { derivedStateOf { gridState.firstVisibleItemIndex } }
+            val videos = state.videos
+            
+            // 🔥 根据 firstVisibleIndex 和 videos 计算封面 URL
+            val visibleCoverUrl = remember(firstVisibleIndex, videos.size) {
+                val url = videos.getOrNull(firstVisibleIndex)?.pic
+                android.util.Log.d("BottomBarColor", "📸 封面URL更新: index=$firstVisibleIndex, url=${url?.take(50)}...")
+                url
+            }
+            
             FrostedBottomBar(
                 currentItem = currentNavItem,
                 onItemClick = { item ->
                     currentNavItem = item
                     when (item) {
                         BottomNavItem.HOME -> { /* 已在首页 */ }
-                        BottomNavItem.DYNAMIC -> { /* TODO: 跳转动态页 */ }
+                        BottomNavItem.DYNAMIC -> onDynamicClick()
                         BottomNavItem.DISCOVER -> { /* TODO: 跳转发现页 */ }
                         BottomNavItem.PROFILE -> onProfileClick()
                     }
                 },
-                modifier = Modifier.align(Alignment.BottomCenter)
+                modifier = Modifier.align(Alignment.BottomCenter),
+                visibleCoverUrl = visibleCoverUrl
             )
         }
     }

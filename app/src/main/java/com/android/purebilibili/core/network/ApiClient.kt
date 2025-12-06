@@ -87,6 +87,16 @@ interface SearchApi {
     suspend fun search(@QueryMap params: Map<String, String>): SearchResponse
 }
 
+// 🔥 动态 API
+interface DynamicApi {
+    @GET("x/polymer/web-dynamic/v1/feed/all")
+    suspend fun getDynamicFeed(
+        @Query("type") type: String = "all",
+        @Query("offset") offset: String = "",
+        @Query("page") page: Int = 1
+    ): DynamicFeedResponse
+}
+
 interface PassportApi {
     @GET("x/passport-login/web/qrcode/generate")
     suspend fun generateQrCode(): QrCodeResponse
@@ -162,5 +172,12 @@ object NetworkModule {
         Retrofit.Builder().baseUrl("https://api.bilibili.com/").client(okHttpClient)
             .addConverterFactory(json.asConverterFactory("application/json".toMediaType())).build()
             .create(SearchApi::class.java)
+    }
+    
+    // 🔥 动态 API
+    val dynamicApi: DynamicApi by lazy {
+        Retrofit.Builder().baseUrl("https://api.bilibili.com/").client(okHttpClient)
+            .addConverterFactory(json.asConverterFactory("application/json".toMediaType())).build()
+            .create(DynamicApi::class.java)
     }
 }

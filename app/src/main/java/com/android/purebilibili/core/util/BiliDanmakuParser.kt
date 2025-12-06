@@ -23,10 +23,13 @@ class BiliDanmakuParser : BaseDanmakuParser() {
                 val parser = factory.newSAXParser()
                 val handler = XmlHandler()
                 parser.parse(InputSource(source), handler)
+                android.util.Log.d("BiliDanmakuParser", "✅ Parsed ${handler.danmakus.size()} danmaku items")
                 return handler.danmakus
             } catch (e: Exception) {
-                e.printStackTrace()
+                android.util.Log.e("BiliDanmakuParser", "❌ Parse failed", e)
             }
+        } else {
+            android.util.Log.w("BiliDanmakuParser", "⚠️ Invalid data source")
         }
         return Danmakus()
     }
@@ -60,6 +63,8 @@ class BiliDanmakuParser : BaseDanmakuParser() {
                         this.textShadowColor = -0x1000000
                         this.index = this@XmlHandler.index++
                         this.flags = mContext?.mGlobalFlagValues
+                        // 🔥🔥 关键修复：设置 priority > 0，否则会被默认过滤器过滤掉
+                        this.priority = 1
                     }
                 }
             }

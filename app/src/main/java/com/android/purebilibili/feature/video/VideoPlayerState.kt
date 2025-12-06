@@ -142,12 +142,15 @@ class VideoPlayerState(
     }
 
     fun loadDanmaku(data: ByteArray) {
-        if (data.isEmpty()) return
+        if (data.isEmpty()) {
+            android.util.Log.w("Danmaku", "Empty danmaku data, skip loading")
+            return
+        }
         scope.launch(Dispatchers.IO) {
             try {
-                // Log data size for debug
-                println("Danmaku data size: ${data.size}")
+                android.util.Log.d("Danmaku", "Loading danmaku, data size: ${data.size} bytes")
                 val stream = java.io.ByteArrayInputStream(data)
+                
                 // 🔥 创建解析器
                 val parser = com.android.purebilibili.core.util.BiliDanmakuParser().apply {
                     load(com.android.purebilibili.core.util.StreamDataSource(stream))
@@ -155,21 +158,68 @@ class VideoPlayerState(
 
                 // 🔥 在主线程绑定到 View
                 launch(Dispatchers.Main) {
-                    danmakuView.prepare(parser, DanmakuContext.create().apply {
-                        setDanmakuStyle(0, 3f)
+                    // 🔥🔥 关键修复：设置 Callback 监听 prepared 事件
+                    danmakuView.setCallback(object : master.flame.danmaku.controller.DrawHandler.Callback {
+                        override fun prepared() {
+                            // 🔥🔥 关键：Callback 可能在后台线程调用，必须切回主线程访问 Player
+                            android.os.Handler(android.os.Looper.getMainLooper()).post {
+                                val viewWidth = danmakuView.width
+                                val viewHeight = danmakuView.height
+                                val isAttached = danmakuView.isAttachedToWindow
+                                android.util.Log.d("Danmaku", "DanmakuView prepared! isDanmakuOn=$isDanmakuOn, currentPos=${player.currentPosition}ms")
+                                android.util.Log.d("Danmaku", "DanmakuView dimensions: ${viewWidth}x${viewHeight}, attached=$isAttached")
+                                
+                                if (viewWidth == 0 || viewHeight == 0) {
+                                    android.util.Log.e("Danmaku", "⚠️ DanmakuView has ZERO dimensions! Cannot render danmaku")
+                                }
+                                
+                                if (isDanmakuOn) {
+                                    android.util.Log.d("Danmaku", "Calling danmakuView.show() and start()")
+                                    try {
+                                        danmakuView.show()
+                                        danmakuView.start(player.currentPosition)
+                                        android.util.Log.d("Danmaku", "✅ show() and start() called successfully")
+                                    } catch (e: Exception) {
+                                        android.util.Log.e("Danmaku", "❌ Error calling show/start", e)
+                                    }
+                                } else {
+                                    android.util.Log.w("Danmaku", "isDanmakuOn is false, skipping start()")
+                                }
+                            }
+                        }
+                        override fun updateTimer(timer: master.flame.danmaku.danmaku.model.DanmakuTimer) {}
+                        override fun danmakuShown(danmaku: master.flame.danmaku.danmaku.model.BaseDanmaku?) {
+                            // 🔥 添加日志：确认弹幕被显示
+                            android.util.Log.d("Danmaku", "danmakuShown: ${danmaku?.text?.take(20)}")
+                        }
+                        override fun drawingFinished() {}
+                    })
+                    
+                    val danmakuContext = DanmakuContext.create().apply {
+                        setDanmakuStyle(master.flame.danmaku.danmaku.model.IDisplayer.DANMAKU_STYLE_STROKEN, 3f)
                         isDuplicateMergingEnabled = true
                         setScrollSpeedFactor(1.2f)
-                        setScaleTextSize(1.0f)
-                    })
+                        setScaleTextSize(1.2f)
+                        setMaximumLines(mapOf(
+                            master.flame.danmaku.danmaku.model.BaseDanmaku.TYPE_SCROLL_RL to 5,
+                            master.flame.danmaku.danmaku.model.BaseDanmaku.TYPE_FIX_TOP to 3,
+                            master.flame.danmaku.danmaku.model.BaseDanmaku.TYPE_FIX_BOTTOM to 3
+                        ))
+                    }
+                    
+                    android.util.Log.d("Danmaku", "Calling danmakuView.prepare()")
+                    danmakuView.prepare(parser, danmakuContext)
+                    danmakuView.showFPS(false)
+                    danmakuView.enableDanmakuDrawingCache(true)
+                    
+                    // 🔥 先调用 show() 确保可见
+                    android.util.Log.d("Danmaku", "Initial show() call, isDanmakuOn=$isDanmakuOn")
                     if (isDanmakuOn) {
                         danmakuView.show()
-                        // 稍微延迟以确保同步
-                        delay(200)
-                        danmakuView.start(player.currentPosition)
                     }
                 }
             } catch (e: Exception) {
-                e.printStackTrace()
+                android.util.Log.e("Danmaku", "Failed to load danmaku", e)
             }
         }
     }
@@ -265,13 +315,13 @@ fun rememberVideoPlayerState(
     LaunchedEffect(bvid) { viewModel.loadVideo(bvid) }
     LaunchedEffect(player) { viewModel.attachPlayer(player) }
     
-    // 🔥 监听弹幕流并在加载后初始化弹幕
-    LaunchedEffect(uiState) {
-        if (uiState is PlayerUiState.Success) {
-            val state = uiState as PlayerUiState.Success
-            if (state.danmakuData != null) {
-                holder.loadDanmaku(state.danmakuData)
-            }
+    // 🔥 监听弹幕数据并在加载后初始化弹幕（仅执行一次）
+    val danmakuData = (uiState as? PlayerUiState.Success)?.danmakuData
+    LaunchedEffect(danmakuData) {
+        android.util.Log.d("VideoPlayerState", "LaunchedEffect(danmakuData): data size = ${danmakuData?.size ?: 0}")
+        if (danmakuData != null && danmakuData.isNotEmpty()) {
+            android.util.Log.d("VideoPlayerState", "Calling holder.loadDanmaku()")
+            holder.loadDanmaku(danmakuData)
         }
     }
 

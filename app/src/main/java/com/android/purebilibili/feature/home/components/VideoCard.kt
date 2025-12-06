@@ -107,13 +107,26 @@ fun ElegantVideoCard(video: VideoItem, index: Int, onClick: (String, Long) -> Un
                     .background(Color.White.copy(alpha = highlightAlpha))
             )
             
+            // 🔥 优化渐变遮罩 - 更细腻的过渡
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(80.dp)
+                    .height(100.dp)
                     .align(Alignment.BottomCenter)
-                    .background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(0.7f))))
+                    .background(
+                        Brush.verticalGradient(
+                            colors = listOf(
+                                Color.Transparent,
+                                Color.Black.copy(alpha = 0.3f),
+                                Color.Black.copy(alpha = 0.7f)
+                            ),
+                            startY = 0f,
+                            endY = Float.POSITIVE_INFINITY
+                        )
+                    )
             )
+            
+            // 🔥 时长标签 - 右下角
             Text(
                 text = FormatUtils.formatDuration(video.duration),
                 color = Color.White,
@@ -122,20 +135,57 @@ fun ElegantVideoCard(video: VideoItem, index: Int, onClick: (String, Long) -> Un
                 modifier = Modifier
                     .align(Alignment.BottomEnd)
                     .padding(8.dp)
-                    .background(Color.Black.copy(0.3f), RoundedCornerShape(4.dp))
-                    .padding(horizontal = 4.dp, vertical = 2.dp)
+                    .background(Color.Black.copy(0.5f), RoundedCornerShape(4.dp))
+                    .padding(horizontal = 5.dp, vertical = 2.dp)
             )
-            Row(modifier = Modifier.align(Alignment.BottomStart).padding(8.dp)) {
-                Text(
-                    text = if (video.stat.view > 0) "▶ ${FormatUtils.formatStat(video.stat.view.toLong())}"
-                           else "🕓 ${FormatUtils.formatProgress(video.progress, video.duration)}",
-                    color = Color.White.copy(0.9f),
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Medium
-                )
+            
+            // 🔥 双重统计 - 左下角 (播放量 + 弹幕)
+            Row(
+                modifier = Modifier
+                    .align(Alignment.BottomStart)
+                    .padding(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                // 播放量
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = "▶",
+                        color = Color.White.copy(0.9f),
+                        fontSize = 9.sp
+                    )
+                    Spacer(modifier = Modifier.width(3.dp))
+                    Text(
+                        text = if (video.stat.view > 0) FormatUtils.formatStat(video.stat.view.toLong())
+                               else FormatUtils.formatProgress(video.progress, video.duration),
+                        color = Color.White.copy(0.95f),
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
+                
+                // 🔥 弹幕数 (仅当有播放量时显示)
+                if (video.stat.view > 0 && video.stat.danmaku > 0) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = "弹",
+                            color = Color.White.copy(0.7f),
+                            fontSize = 9.sp
+                        )
+                        Spacer(modifier = Modifier.width(2.dp))
+                        Text(
+                            text = FormatUtils.formatStat(video.stat.danmaku.toLong()),
+                            color = Color.White.copy(0.85f),
+                            fontSize = 10.sp
+                        )
+                    }
+                }
             }
         }
+        
         Spacer(modifier = Modifier.height(10.dp))
+        
+        // 标题
         Text(
             text = video.title,
             maxLines = 2,
@@ -150,15 +200,40 @@ fun ElegantVideoCard(video: VideoItem, index: Int, onClick: (String, Long) -> Un
             ),
             modifier = Modifier.padding(horizontal = 4.dp)
         )
+        
         Spacer(modifier = Modifier.height(6.dp))
-        Row(modifier = Modifier.padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+        
+        // 🔥 UP主信息行 - 添加头像缩略图
+        Row(
+            modifier = Modifier.padding(horizontal = 4.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // 🔥 UP主头像小图标
+            if (video.owner.face.isNotEmpty()) {
+                AsyncImage(
+                    model = ImageRequest.Builder(LocalContext.current)
+                        .data(FormatUtils.fixImageUrl(video.owner.face))
+                        .crossfade(true)
+                        .build(),
+                    contentDescription = null,
+                    modifier = Modifier
+                        .size(18.dp)
+                        .clip(androidx.compose.foundation.shape.CircleShape)
+                        .background(MaterialTheme.colorScheme.surfaceVariant),
+                    contentScale = ContentScale.Crop
+                )
+                Spacer(modifier = Modifier.width(5.dp))
+            }
+            
             Text(
                 text = video.owner.name,
                 fontSize = 12.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f)
             )
+            
             Icon(
                 Icons.Default.MoreVert,
                 contentDescription = null,

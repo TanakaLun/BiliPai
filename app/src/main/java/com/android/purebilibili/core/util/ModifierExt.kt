@@ -1,17 +1,27 @@
 package com.android.purebilibili.core.util
 
+import android.os.Build
+import android.view.HapticFeedbackConstants
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.composed
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 
@@ -80,5 +90,116 @@ fun VideoGridItemSkeleton() {
                 .clip(RoundedCornerShape(4.dp))
                 .shimmerEffect()
         )
+    }
+}
+
+// =============================================================================
+// 🔥 Android 特有功能：触觉反馈 + 弹性点击
+// =============================================================================
+
+/**
+ * 🔥 触觉反馈类型枚举
+ */
+enum class HapticType {
+    LIGHT,      // 轻触 (选择/切换)
+    MEDIUM,     // 中等 (确认)
+    HEAVY,      // 重击 (警告/删除)
+    SELECTION   // 选择变化
+}
+
+/**
+ * 🔥 触发触觉反馈
+ * 
+ * - Android 12+: 使用新的 GESTURE_START/END 等常量
+ * - 旧版本: 使用 LONG_PRESS/KEYBOARD_TAP 等
+ */
+@Composable
+fun rememberHapticFeedback(): (HapticType) -> Unit {
+    val view = LocalView.current
+    return remember(view) {
+        { type: HapticType ->
+            val feedbackConstant = when (type) {
+                HapticType.LIGHT -> {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                        HapticFeedbackConstants.CONFIRM
+                    } else {
+                        HapticFeedbackConstants.KEYBOARD_TAP
+                    }
+                }
+                HapticType.MEDIUM -> HapticFeedbackConstants.LONG_PRESS
+                HapticType.HEAVY -> {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                        HapticFeedbackConstants.REJECT
+                    } else {
+                        HapticFeedbackConstants.LONG_PRESS
+                    }
+                }
+                HapticType.SELECTION -> {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                        HapticFeedbackConstants.SEGMENT_FREQUENT_TICK
+                    } else {
+                        HapticFeedbackConstants.CLOCK_TICK
+                    }
+                }
+            }
+            view.performHapticFeedback(feedbackConstant)
+        }
+    }
+}
+
+/**
+ * 🔥 弹性点击 Modifier (带缩放动画 + 触觉反馈)
+ * 
+ * Android 特有的交互体验：
+ * - 按压时缩放到 0.95
+ * - 弹性回弹动画
+ * - 自动触觉反馈
+ */
+fun Modifier.bouncyClickable(
+    hapticType: HapticType = HapticType.LIGHT,
+    enabled: Boolean = true,
+    onClick: () -> Unit
+): Modifier = composed {
+    val interactionSource = remember { MutableInteractionSource() }
+    val isPressed by interactionSource.collectIsPressedAsState()
+    val haptic = rememberHapticFeedback()
+    
+    val scale by animateFloatAsState(
+        targetValue = if (isPressed) 0.95f else 1f,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessMedium
+        ),
+        label = "bounce_scale"
+    )
+    
+    this
+        .graphicsLayer {
+            scaleX = scale
+            scaleY = scale
+        }
+        .clickable(
+            interactionSource = interactionSource,
+            indication = null,
+            enabled = enabled
+        ) {
+            haptic(hapticType)
+            onClick()
+        }
+}
+
+/**
+ * 🔥 带涟漪效果的触觉点击 (Material 3 风格)
+ */
+fun Modifier.hapticClickable(
+    hapticType: HapticType = HapticType.LIGHT,
+    enabled: Boolean = true,
+    onClick: () -> Unit
+): Modifier = composed {
+    val haptic = rememberHapticFeedback()
+    
+    this.clickable(enabled = enabled) {
+        haptic(hapticType)
+        onClick()
     }
 }

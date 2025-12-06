@@ -7,6 +7,8 @@ import com.android.purebilibili.core.database.AppDatabase
 import com.android.purebilibili.core.database.entity.SearchHistory
 import com.android.purebilibili.data.model.response.HotItem
 import com.android.purebilibili.data.model.response.VideoItem
+import com.android.purebilibili.data.model.response.SearchUpItem
+import com.android.purebilibili.data.model.response.SearchType
 import com.android.purebilibili.data.repository.SearchRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -17,7 +19,12 @@ data class SearchUiState(
     val query: String = "",
     val isSearching: Boolean = false,
     val showResults: Boolean = false,
+    // 🔥 搜索类型
+    val searchType: SearchType = SearchType.VIDEO,
+    // 视频结果
     val searchResults: List<VideoItem> = emptyList(),
+    // 🔥 UP主 结果
+    val upResults: List<SearchUpItem> = emptyList(),
     val hotList: List<HotItem> = emptyList(),
     val historyList: List<SearchHistory> = emptyList(),
     val error: String? = null
@@ -40,6 +47,15 @@ class SearchViewModel(application: Application) : AndroidViewModel(application) 
             _uiState.update { it.copy(showResults = false, error = null) }
         }
     }
+    
+    // 🔥 切换搜索类型
+    fun setSearchType(type: SearchType) {
+        _uiState.update { it.copy(searchType = type) }
+        // 如果有查询内容，重新搜索
+        if (_uiState.value.query.isNotBlank()) {
+            search(_uiState.value.query)
+        }
+    }
 
     fun search(keyword: String) {
         if (keyword.isBlank()) return
@@ -48,11 +64,29 @@ class SearchViewModel(application: Application) : AndroidViewModel(application) 
         saveHistory(keyword)
 
         viewModelScope.launch {
-            val result = SearchRepository.search(keyword)
-            result.onSuccess { videos ->
-                _uiState.update { it.copy(isSearching = false, searchResults = videos) }
-            }.onFailure { e ->
-                _uiState.update { it.copy(isSearching = false, error = e.message ?: "搜索失败") }
+            val searchType = _uiState.value.searchType
+            
+            when (searchType) {
+                SearchType.VIDEO -> {
+                    val result = SearchRepository.search(keyword)
+                    result.onSuccess { videos ->
+                        _uiState.update { it.copy(isSearching = false, searchResults = videos, upResults = emptyList()) }
+                    }.onFailure { e ->
+                        _uiState.update { it.copy(isSearching = false, error = e.message ?: "搜索失败") }
+                    }
+                }
+                SearchType.UP -> {
+                    val result = SearchRepository.searchUp(keyword)
+                    result.onSuccess { ups ->
+                        _uiState.update { it.copy(isSearching = false, upResults = ups, searchResults = emptyList()) }
+                    }.onFailure { e ->
+                        _uiState.update { it.copy(isSearching = false, error = e.message ?: "搜索失败") }
+                    }
+                }
+                else -> {
+                    // 其他类型暂未实现
+                    _uiState.update { it.copy(isSearching = false, error = "该搜索类型暂未支持") }
+                }
             }
         }
     }
@@ -68,7 +102,6 @@ class SearchViewModel(application: Application) : AndroidViewModel(application) 
 
     private fun loadHistory() {
         viewModelScope.launch {
-            // 🔥🔥🔥 核心修复：这里改成了 getAll() 以匹配 SearchHistoryDao 🔥🔥🔥
             searchDao.getAll().collect { history ->
                 _uiState.update { it.copy(historyList = history) }
             }

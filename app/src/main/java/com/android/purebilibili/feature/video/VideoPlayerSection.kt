@@ -209,28 +209,39 @@ fun VideoPlayerSection(
                 }
             }
     ) {
+        // 1. PlayerView
         AndroidView(
-            factory = {
-                PlayerView(it).apply {
-                    this.player = playerState.player
+            factory = { ctx ->
+                PlayerView(ctx).apply {
+                    player = playerState.player
                     setShowBuffering(PlayerView.SHOW_BUFFERING_ALWAYS)
                     useController = false
                 }
             },
             modifier = Modifier.fillMaxSize()
         )
-
+        
+        // 2. DanmakuView - 使用 key 确保不重复创建
         if (!isInPipMode) {
-            AndroidView(
-                factory = {
-                    val view = playerState.danmakuView
-                    if (view.parent != null) {
-                        (view.parent as ViewGroup).removeView(view)
-                    }
-                    view
-                },
-                modifier = Modifier.fillMaxSize().zIndex(1f)
-            )
+            key(playerState.danmakuView) {
+                AndroidView(
+                    factory = { _ ->
+                        val dv = playerState.danmakuView
+                        // 🔥 确保从旧 parent 移除
+                        (dv.parent as? ViewGroup)?.removeView(dv)
+                        dv.apply {
+                            setBackgroundColor(android.graphics.Color.TRANSPARENT)
+                            visibility = android.view.View.VISIBLE
+                        }
+                    },
+                    update = { view ->
+                        view.visibility = android.view.View.VISIBLE
+                        // 🔥 确保在最顶层
+                        view.bringToFront()
+                    },
+                    modifier = Modifier.fillMaxSize()
+                )
+            }
         }
 
         if (isGestureVisible && !isInPipMode) {

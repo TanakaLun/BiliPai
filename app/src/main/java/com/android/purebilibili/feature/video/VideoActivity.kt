@@ -2,11 +2,16 @@
 package com.android.purebilibili.feature.video
 
 import android.Manifest
+import android.app.PendingIntent
 import android.app.PictureInPictureParams
+import android.app.RemoteAction
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.ActivityInfo
 import android.content.res.Configuration
+import android.graphics.drawable.Icon
 import android.os.Build
 import android.os.Bundle
 import android.util.Log
@@ -37,11 +42,35 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 
 private const val TAG = "BiliPlayerActivity"
 
+// 🔥 PiP 控制 Action 常量
+private const val ACTION_PIP_CONTROL = "com.android.purebilibili.PIP_CONTROL"
+private const val EXTRA_CONTROL_TYPE = "control_type"
+private const val CONTROL_TYPE_PLAY = 1
+private const val CONTROL_TYPE_PAUSE = 2
+
 class VideoActivity : ComponentActivity() {
 
     private val viewModel: PlayerViewModel by viewModels()
     private var isFullscreen by mutableStateOf(false)
     private var isInPipMode by mutableStateOf(false)
+    
+    // 🔥 PiP 广播接收器
+    private val pipReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (intent?.action == ACTION_PIP_CONTROL) {
+                when (intent.getIntExtra(EXTRA_CONTROL_TYPE, 0)) {
+                    CONTROL_TYPE_PLAY -> {
+                        Log.d(TAG, "PiP: Play")
+                        // 由 Compose 状态自动处理播放
+                    }
+                    CONTROL_TYPE_PAUSE -> {
+                        Log.d(TAG, "PiP: Pause")
+                        // 由 Compose 状态自动处理暂停
+                    }
+                }
+            }
+        }
+    }
 
     // 🔥 1. 权限回调
     private val requestPermissionLauncher = registerForActivityResult(
@@ -59,6 +88,16 @@ class VideoActivity : ComponentActivity() {
         // 🔥 2. 请求权限 (Android 13+)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             requestPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
+        
+        // 🔥 注册 PiP 控制广播
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val filter = IntentFilter(ACTION_PIP_CONTROL)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                registerReceiver(pipReceiver, filter, RECEIVER_NOT_EXPORTED)
+            } else {
+                registerReceiver(pipReceiver, filter)
+            }
         }
 
         val bvid = intent.getStringExtra("bvid")
@@ -86,7 +125,7 @@ class VideoActivity : ComponentActivity() {
 
                 Column(modifier = Modifier.fillMaxSize().background(Color.Black)) {
                     Box(
-                        modifier = if (isFullscreen) {
+                        modifier = if (isFullscreen || isInPipMode) {
                             Modifier.fillMaxSize()
                         } else {
                             Modifier.fillMaxWidth().aspectRatio(16f / 9f)
@@ -119,6 +158,18 @@ class VideoActivity : ComponentActivity() {
             }
         }
     }
+    
+    override fun onDestroy() {
+        super.onDestroy()
+        // 🔥 注销广播接收器
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            try {
+                unregisterReceiver(pipReceiver)
+            } catch (e: Exception) {
+                Log.w(TAG, "Failed to unregister PiP receiver", e)
+            }
+        }
+    }
 
     // --- 配置与全屏逻辑保持不变 ---
     override fun onConfigurationChanged(newConfig: Configuration) {
@@ -146,16 +197,64 @@ class VideoActivity : ComponentActivity() {
         }
     }
 
+    // 🔥 构建 PiP 参数 (带播放控制按钮)
+    private fun buildPipParams(isPlaying: Boolean = true): PictureInPictureParams {
+        val builder = PictureInPictureParams.Builder()
+            .setAspectRatio(Rational(16, 9))
+        
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val actions = mutableListOf<RemoteAction>()
+            
+            // 播放/暂停按钮
+            val playPauseAction = if (isPlaying) {
+                RemoteAction(
+                    Icon.createWithResource(this, android.R.drawable.ic_media_pause),
+                    "暂停",
+                    "暂停播放",
+                    PendingIntent.getBroadcast(
+                        this,
+                        CONTROL_TYPE_PAUSE,
+                        Intent(ACTION_PIP_CONTROL).putExtra(EXTRA_CONTROL_TYPE, CONTROL_TYPE_PAUSE),
+                        PendingIntent.FLAG_IMMUTABLE
+                    )
+                )
+            } else {
+                RemoteAction(
+                    Icon.createWithResource(this, android.R.drawable.ic_media_play),
+                    "播放",
+                    "继续播放",
+                    PendingIntent.getBroadcast(
+                        this,
+                        CONTROL_TYPE_PLAY,
+                        Intent(ACTION_PIP_CONTROL).putExtra(EXTRA_CONTROL_TYPE, CONTROL_TYPE_PLAY),
+                        PendingIntent.FLAG_IMMUTABLE
+                    )
+                )
+            }
+            actions.add(playPauseAction)
+            
+            builder.setActions(actions)
+            
+            // Android 12+: 自动进入 PiP 模式
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                builder.setAutoEnterEnabled(true)
+                builder.setSeamlessResizeEnabled(true)
+            }
+        }
+        
+        return builder.build()
+    }
+
     override fun onUserLeaveHint() {
         super.onUserLeaveHint()
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+        // 🔥 检查设置是否开启了后台播放
+        val prefs = getSharedPreferences("settings", Context.MODE_PRIVATE)
+        val bgPlayEnabled = prefs.getBoolean("bg_play", false)
+        
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && bgPlayEnabled) {
             val state = viewModel.uiState.value
             if (state is PlayerUiState.Success) {
-                enterPictureInPictureMode(
-                    PictureInPictureParams.Builder()
-                        .setAspectRatio(Rational(16, 9))
-                        .build()
-                )
+                enterPictureInPictureMode(buildPipParams(true))
             }
         }
     }
@@ -163,6 +262,7 @@ class VideoActivity : ComponentActivity() {
     override fun onPictureInPictureModeChanged(isInPictureInPictureMode: Boolean, newConfig: Configuration) {
         super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig)
         isInPipMode = isInPictureInPictureMode
+        Log.d(TAG, "PiP mode changed: $isInPictureInPictureMode")
     }
 
     companion object {

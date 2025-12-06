@@ -37,7 +37,8 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
@@ -84,6 +85,9 @@ dependencies {
 
     // --- 3. Image (图片加载) ---
     implementation("io.coil-kt:coil-compose:2.6.0")
+    
+    // --- 3.1 Palette (颜色提取 - 动态取色) ---
+    implementation("androidx.palette:palette-ktx:1.0.0")
 
     // --- 4. Player (视频播放器 Media3) ---
     implementation("androidx.media3:media3-exoplayer:1.3.0")

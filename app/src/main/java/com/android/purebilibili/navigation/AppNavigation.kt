@@ -5,6 +5,7 @@ import android.net.Uri
 import androidx.compose.animation.AnimatedContentTransitionScope
 import androidx.compose.animation.core.tween
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState // 🔥 新增
 import androidx.compose.runtime.getValue // 🔥 新增
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -24,6 +25,7 @@ import com.android.purebilibili.feature.list.CommonListScreen
 import com.android.purebilibili.feature.list.HistoryViewModel
 import com.android.purebilibili.feature.list.FavoriteViewModel
 import com.android.purebilibili.feature.video.VideoDetailScreen
+import com.android.purebilibili.feature.dynamic.DynamicScreen
 
 // 定义路由参数结构
 object VideoRoute {
@@ -39,7 +41,11 @@ object VideoRoute {
 
 @Composable
 fun AppNavigation(
-    navController: NavHostController = rememberNavController()
+    navController: NavHostController = rememberNavController(),
+    // 🔥 PiP 支持参数
+    isInPipMode: Boolean = false,
+    onVideoDetailEnter: () -> Unit = {},
+    onVideoDetailExit: () -> Unit = {}
 ) {
     val homeViewModel: HomeViewModel = viewModel()
 
@@ -67,7 +73,8 @@ fun AppNavigation(
                 onSearchClick = { navController.navigate(ScreenRoutes.Search.route) },
                 onAvatarClick = { navController.navigate(ScreenRoutes.Login.route) },
                 onProfileClick = { navController.navigate(ScreenRoutes.Profile.route) },
-                onSettingsClick = { navController.navigate(ScreenRoutes.Settings.route) }
+                onSettingsClick = { navController.navigate(ScreenRoutes.Settings.route) },
+                onDynamicClick = { navController.navigate(ScreenRoutes.Dynamic.route) }
             )
         }
 
@@ -85,10 +92,18 @@ fun AppNavigation(
             val bvid = backStackEntry.arguments?.getString("bvid") ?: ""
             val coverUrl = backStackEntry.arguments?.getString("cover") ?: ""
 
+            // 🔥 进入视频详情页时通知 MainActivity
+            DisposableEffect(Unit) {
+                onVideoDetailEnter()
+                onDispose {
+                    onVideoDetailExit()
+                }
+            }
+
             VideoDetailScreen(
                 bvid = bvid,
                 coverUrl = coverUrl,
-                isInPipMode = false,
+                isInPipMode = isInPipMode,
                 isVisible = true,
                 onBack = { navController.popBackStack() }
             )
@@ -140,7 +155,20 @@ fun AppNavigation(
             )
         }
 
-        // --- 6. 搜索 (核心修复) ---
+        // --- 6. 动态页面 ---
+        composable(
+            route = ScreenRoutes.Dynamic.route,
+            enterTransition = { slideIntoContainer(AnimatedContentTransitionScope.SlideDirection.Left, tween(animDuration)) },
+            popExitTransition = { slideOutOfContainer(AnimatedContentTransitionScope.SlideDirection.Right, tween(animDuration)) }
+        ) {
+            DynamicScreen(
+                onVideoClick = { bvid -> navigateToVideo(bvid, 0L, "") },
+                onUserClick = { /* TODO: 跳转用户空间 */ },
+                onBack = { navController.popBackStack() }
+            )
+        }
+
+        // --- 7. 搜索 (核心修复) ---
         composable(
             route = ScreenRoutes.Search.route,
             enterTransition = { slideIntoContainer(AnimatedContentTransitionScope.SlideDirection.Left, tween(animDuration)) },

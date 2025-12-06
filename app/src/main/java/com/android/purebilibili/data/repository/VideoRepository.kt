@@ -155,7 +155,9 @@ object VideoRepository {
         try {
             val data = fetchPlayUrlWithWbi(bvid, cid, targetQn)
             if (data != null && !data.durl.isNullOrEmpty()) return data
-        } catch (e: Exception) {}
+        } catch (e: Exception) {
+            android.util.Log.w("VideoRepo", "fetchPlayUrlRecursive failed for qn=$targetQn: ${e.message}")
+        }
         var nextIndex = -1
         if (targetQn in QUALITY_CHAIN) {
             nextIndex = QUALITY_CHAIN.indexOf(targetQn) + 1
@@ -165,11 +167,15 @@ object VideoRepository {
             }
         }
         if (nextIndex == -1 || nextIndex >= QUALITY_CHAIN.size) return null
+        
+        // 🔥 添加延迟防止 412 限流
+        kotlinx.coroutines.delay(500)
         return fetchPlayUrlRecursive(bvid, cid, QUALITY_CHAIN[nextIndex])
     }
 
     private suspend fun fetchPlayUrlWithWbi(bvid: String, cid: Long, qn: Int): PlayUrlData? {
         try {
+            android.util.Log.d("VideoRepo", "fetchPlayUrlWithWbi: bvid=$bvid, cid=$cid, qn=$qn")
             val navResp = api.getNavInfo()
             val wbiImg = navResp.data?.wbi_img ?: throw Exception("Key Error")
             val imgKey = wbiImg.img_url.substringAfterLast("/").substringBefore(".")
@@ -180,12 +186,17 @@ object VideoRepository {
             )
             val signedParams = WbiUtils.sign(params, imgKey, subKey)
             val response = api.getPlayUrl(signedParams)
+            android.util.Log.d("VideoRepo", "PlayUrl response: code=${response.code}, quality=${response.data?.quality}")
             if (response.code == 0) return response.data
             return null
         } catch (e: HttpException) {
+            android.util.Log.e("VideoRepo", "HttpException: ${e.code()}")
             if (e.code() in listOf(402, 403, 404, 412)) return null
             throw e
-        } catch (e: Exception) { return null }
+        } catch (e: Exception) { 
+            android.util.Log.e("VideoRepo", "Exception: ${e.message}")
+            return null 
+        }
     }
 
     suspend fun getRelatedVideos(bvid: String): List<RelatedVideo> = withContext(Dispatchers.IO) {

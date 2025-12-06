@@ -31,7 +31,11 @@ data class Stat(
     val view: Int = 0,
     val danmaku: Int = 0,
     val reply: Int = 0,
-    val like: Int = 0
+    val like: Int = 0,
+    // 🔥 UI 美化增强：添加更多统计字段
+    val coin: Int = 0,
+    val favorite: Int = 0,
+    val share: Int = 0
 )
 
 // --- 2. 历史记录相关模型 ---

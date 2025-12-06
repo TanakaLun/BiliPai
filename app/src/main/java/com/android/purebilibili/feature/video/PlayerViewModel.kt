@@ -111,7 +111,9 @@ class PlayerViewModel : ViewModel() {
 
             detailResult.onSuccess { (info, playData) ->
                 currentCid = info.cid
+                android.util.Log.d("PlayerVM", "Fetching danmaku for cid: $currentCid")
                 val danmaku = VideoRepository.getDanmakuRawData(info.cid)
+                android.util.Log.d("PlayerVM", "Danmaku data result: ${danmaku?.size ?: 0} bytes")
                 val url = playData.durl?.firstOrNull()?.url ?: ""
                 val qualities = playData.accept_quality ?: emptyList()
                 val labels = playData.accept_description ?: emptyList()

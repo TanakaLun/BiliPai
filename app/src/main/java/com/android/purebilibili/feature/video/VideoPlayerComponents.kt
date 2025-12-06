@@ -197,24 +197,24 @@ fun ActionButtonsRow(info: ViewInfo, onCommentClick: () -> Unit) {
                 iconSize = 26.dp
             )
 
-            // 投币
+            // 投币 - 🔥 显示真实数据
             ActionButton(
                 icon = Icons.Default.MonetizationOn,
-                text = "投币",
+                text = if (info.stat.coin > 0) FormatUtils.formatStat(info.stat.coin.toLong()) else "投币",
                 iconSize = 26.dp
             )
 
-            // 收藏
+            // 收藏 - 🔥 显示真实数据
             ActionButton(
                 icon = Icons.Outlined.Star,
-                text = "收藏",
+                text = if (info.stat.favorite > 0) FormatUtils.formatStat(info.stat.favorite.toLong()) else "收藏",
                 iconSize = 26.dp
             )
 
-            // 分享
+            // 分享 - 🔥 显示真实数据
             ActionButton(
                 icon = Icons.Outlined.Share,
-                text = "分享",
+                text = if (info.stat.share > 0) FormatUtils.formatStat(info.stat.share.toLong()) else "分享",
                 iconSize = 26.dp
             )
 

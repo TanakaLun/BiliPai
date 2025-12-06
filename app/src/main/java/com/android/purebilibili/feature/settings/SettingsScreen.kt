@@ -17,6 +17,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.Send
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -256,6 +258,36 @@ fun SettingsScreen(
                 .padding(padding)
                 .fillMaxSize()
         ) {
+            // 🔥 作者联系方式 (置顶)
+            item { SettingsSectionTitle("关注作者") }
+            item {
+                SettingsGroup {
+                    SettingClickableItem(
+                        icon = Icons.Outlined.Code,
+                        title = "开源主页",
+                        value = "GitHub",
+                        onClick = { uriHandler.openUri(GITHUB_URL) },
+                        iconTint = Color(0xFF7E57C2) // Deep Purple
+                    )
+                    Divider()
+                    SettingClickableItem(
+                        icon = Icons.Filled.Send,
+                        title = "Telegram 频道",
+                        value = "@BiliPai",
+                        onClick = { uriHandler.openUri("https://t.me/BiliPai") },
+                        iconTint = Color(0xFF0088CC) // Telegram Blue
+                    )
+                    Divider()
+                    SettingClickableItem(
+                        icon = Icons.Filled.Star,
+                        title = "Twitter / X",
+                        value = "@YangY_0x00",
+                        onClick = { uriHandler.openUri("https://x.com/YangY_0x00") },
+                        iconTint = Color(0xFF000000) // X Black
+                    )
+                }
+            }
+            
             item { SettingsSectionTitle("首页与外观") }
             item {
                 SettingsGroup {
@@ -263,7 +295,8 @@ fun SettingsScreen(
                         icon = Icons.Outlined.Dashboard,
                         title = "首页展示方式",
                         value = DisplayMode.entries.find { it.value == displayModeInt }?.title ?: "未知",
-                        onClick = { showModeDialog = true }
+                        onClick = { showModeDialog = true },
+                        iconTint = Color(0xFF5C6BC0) // Indigo
                     )
                     Divider()
 
@@ -273,7 +306,8 @@ fun SettingsScreen(
                             title = "动态取色 (Material You)",
                             subtitle = "跟随系统壁纸变换应用主题色",
                             checked = state.dynamicColor,
-                            onCheckedChange = { viewModel.toggleDynamicColor(it) }
+                            onCheckedChange = { viewModel.toggleDynamicColor(it) },
+                            iconTint = Color(0xFFEC407A) // Pink
                         )
                         Divider()
                     }
@@ -282,7 +316,8 @@ fun SettingsScreen(
                         icon = Icons.Outlined.DarkMode,
                         title = "深色模式",
                         value = state.themeMode.label,
-                        onClick = { showThemeDialog = true }
+                        onClick = { showThemeDialog = true },
+                        iconTint = Color(0xFF42A5F5) // Blue
                     )
                 }
             }
@@ -295,7 +330,8 @@ fun SettingsScreen(
                         title = "启用硬件解码",
                         subtitle = "减少发热和耗电 (推荐开启)",
                         checked = state.hwDecode,
-                        onCheckedChange = { viewModel.toggleHwDecode(it) }
+                        onCheckedChange = { viewModel.toggleHwDecode(it) },
+                        iconTint = Color(0xFF66BB6A) // Green
                     )
                     Divider()
                     SettingSwitchItem(
@@ -303,7 +339,8 @@ fun SettingsScreen(
                         title = "视频自动播放",
                         subtitle = "在列表静音播放预览",
                         checked = state.autoPlay,
-                        onCheckedChange = { viewModel.toggleAutoPlay(it) }
+                        onCheckedChange = { viewModel.toggleAutoPlay(it) },
+                        iconTint = Color(0xFFAB47BC) // Purple
                     )
                     Divider()
 
@@ -328,7 +365,8 @@ fun SettingsScreen(
                                 // 关闭时直接关闭
                                 viewModel.toggleBgPlay(false)
                             }
-                        }
+                        },
+                        iconTint = Color(0xFF26A69A) // Teal
                     )
                     Divider()
                     SettingSwitchItem(
@@ -339,7 +377,8 @@ fun SettingsScreen(
                         onCheckedChange = {
                             isStatsEnabled = it
                             prefs.edit().putBoolean("show_stats", it).apply()
-                        }
+                        },
+                        iconTint = Color(0xFF78909C) // Blue Grey
                     )
                 }
             }
@@ -357,7 +396,8 @@ fun SettingsScreen(
                             danmakuScale = newScale
                             prefs.edit().putFloat("danmaku_scale", newScale).apply()
                             Toast.makeText(context, "字号已调整", Toast.LENGTH_SHORT).show()
-                        }
+                        },
+                        iconTint = Color(0xFFFF7043) // Deep Orange
                     )
                 }
             }
@@ -369,21 +409,24 @@ fun SettingsScreen(
                         icon = Icons.Outlined.DeleteOutline,
                         title = "清除缓存",
                         value = state.cacheSize,
-                        onClick = { showCacheDialog = true }
+                        onClick = { showCacheDialog = true },
+                        iconTint = Color(0xFFEF5350) // Red
                     )
                     Divider()
                     SettingClickableItem(
                         icon = Icons.Outlined.Code,
                         title = "开源主页",
                         value = "GitHub",
-                        onClick = { uriHandler.openUri(GITHUB_URL) }
+                        onClick = { uriHandler.openUri(GITHUB_URL) },
+                        iconTint = Color(0xFF7E57C2) // Deep Purple
                     )
                     Divider()
                     SettingClickableItem(
                         icon = Icons.Outlined.Info,
                         title = "版本",
                         value = "v1.0.2 Beta",
-                        onClick = null
+                        onClick = null,
+                        iconTint = Color(0xFF29B6F6) // Light Blue
                     )
                 }
             }
@@ -423,7 +466,9 @@ fun SettingSwitchItem(
     title: String,
     subtitle: String? = null,
     checked: Boolean,
-    onCheckedChange: (Boolean) -> Unit
+    onCheckedChange: (Boolean) -> Unit,
+    // 🔥 新增：图标颜色
+    iconTint: Color = BiliPink
 ) {
     Row(
         modifier = Modifier
@@ -433,8 +478,17 @@ fun SettingSwitchItem(
         verticalAlignment = Alignment.CenterVertically
     ) {
         if (icon != null) {
-            Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(24.dp))
-            Spacer(modifier = Modifier.width(16.dp))
+            // 🔥 彩色圆形背景图标
+            Box(
+                modifier = Modifier
+                    .size(36.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(iconTint.copy(alpha = 0.12f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(icon, contentDescription = null, tint = iconTint, modifier = Modifier.size(20.dp))
+            }
+            Spacer(modifier = Modifier.width(14.dp))
         }
         Column(modifier = Modifier.weight(1f)) {
             Text(text = title, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurface)
@@ -452,7 +506,7 @@ fun SettingSwitchItem(
                 uncheckedThumbColor = MaterialTheme.colorScheme.outline,
                 uncheckedTrackColor = MaterialTheme.colorScheme.surfaceVariant
             ),
-            modifier = Modifier.scale(0.9f)  // 🔥 调整为 0.9f 更平衡
+            modifier = Modifier.scale(0.9f)
         )
     }
 }
@@ -462,18 +516,29 @@ fun SettingClickableItem(
     icon: ImageVector? = null,
     title: String,
     value: String? = null,
-    onClick: (() -> Unit)? = null
+    onClick: (() -> Unit)? = null,
+    // 🔥 新增：图标颜色
+    iconTint: Color = BiliPink
 ) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(enabled = onClick != null) { onClick?.invoke() }
-            .padding(horizontal = 16.dp, vertical = 16.dp),
+            .padding(horizontal = 16.dp, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         if (icon != null) {
-            Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(24.dp))
-            Spacer(modifier = Modifier.width(16.dp))
+            // 🔥 彩色圆形背景图标
+            Box(
+                modifier = Modifier
+                    .size(36.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(iconTint.copy(alpha = 0.12f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(icon, contentDescription = null, tint = iconTint, modifier = Modifier.size(20.dp))
+            }
+            Spacer(modifier = Modifier.width(14.dp))
         }
         Text(text = title, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.weight(1f))
         Row(verticalAlignment = Alignment.CenterVertically) {
