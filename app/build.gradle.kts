@@ -37,8 +37,10 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = true
-            isShrinkResources = true
+            // 🔥 暂时关闭 R8 混淆以修复反射崩溃问题
+            // 问题: java.lang.Class cannot be cast to java.lang.reflect.ParameterizedType
+            isMinifyEnabled = false
+            isShrinkResources = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
@@ -88,6 +90,9 @@ dependencies {
     
     // --- 3.1 Palette (颜色提取 - 动态取色) ---
     implementation("androidx.palette:palette-ktx:1.0.0")
+    
+    // --- 3.2 Lottie (动画效果) ---
+    implementation("com.airbnb.android:lottie-compose:6.3.0")
 
     // --- 4. Player (视频播放器 Media3) ---
     implementation("androidx.media3:media3-exoplayer:1.3.0")

@@ -316,9 +316,10 @@ fun VideoPlayerSection(
                 // 🔥🔥 [关键] 传入设置状态和真实分辨率字符串
                 showStats = showStats,
                 realResolution = realResolution,
-                // 🔥🔥 [新增] 传入清晰度切换状态
+                // 🔥🔥 [新增] 传入清晰度切换状态和会员状态
                 isQualitySwitching = uiState.isQualitySwitching,
-                isLoggedIn = uiState.isLoggedIn
+                isLoggedIn = uiState.isLoggedIn,
+                isVip = uiState.isVip
             )
         }
     }

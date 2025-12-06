@@ -38,6 +38,9 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import com.android.purebilibili.core.theme.BiliPink
+import com.android.purebilibili.core.ui.EmptyState
+import com.android.purebilibili.core.ui.LoadingAnimation
+import com.android.purebilibili.core.ui.BiliGradientButton
 import com.android.purebilibili.data.model.response.*
 
 /**
@@ -99,19 +102,14 @@ fun DynamicScreen(
                 verticalArrangement = Arrangement.spacedBy(12.dp),
                 modifier = Modifier.fillMaxSize()
             ) {
-                // 🔥 未登录提示
+                // 🔥 未登录提示 - 使用现代化空状态组件
                 if (state.items.isEmpty() && !state.isLoading && state.error == null) {
                     item {
-                        Box(
-                            modifier = Modifier.fillMaxWidth().height(300.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Text("暂无动态", fontSize = 16.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                Spacer(modifier = Modifier.height(8.dp))
-                                Text("登录后查看关注 UP主 的动态", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(0.6f))
-                            }
-                        }
+                        EmptyState(
+                            message = "暂无动态",
+                            actionText = "登录后查看关注 UP主 的动态",
+                            modifier = Modifier.height(300.dp)
+                        )
                     }
                 }
                 
@@ -131,7 +129,7 @@ fun DynamicScreen(
                             modifier = Modifier.fillMaxWidth().padding(16.dp),
                             contentAlignment = Alignment.Center
                         ) {
-                            CircularProgressIndicator(color = BiliPink, strokeWidth = 2.dp)
+                            LoadingAnimation(size = 40.dp)
                         }
                     }
                 }
@@ -164,7 +162,7 @@ fun DynamicScreen(
                 contentColor = BiliPink
             )
             
-            // 错误提示
+            // 错误提示 - 使用现代化按钮
             if (state.error != null && state.items.isEmpty()) {
                 Column(
                     modifier = Modifier.align(Alignment.Center),
@@ -172,9 +170,10 @@ fun DynamicScreen(
                 ) {
                     Text(state.error ?: "", color = MaterialTheme.colorScheme.error)
                     Spacer(modifier = Modifier.height(16.dp))
-                    Button(onClick = { viewModel.refresh() }, colors = ButtonDefaults.buttonColors(containerColor = BiliPink)) {
-                        Text("重试")
-                    }
+                    BiliGradientButton(
+                        text = "重试",
+                        onClick = { viewModel.refresh() }
+                    )
                 }
             }
         }

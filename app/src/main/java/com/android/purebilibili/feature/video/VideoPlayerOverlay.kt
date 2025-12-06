@@ -54,7 +54,9 @@ fun VideoPlayerOverlay(
     showStats: Boolean = false,
     realResolution: String = "",
     // 🔥🔥 [新增参数] 清晰度切换中状态
-    isQualitySwitching: Boolean = false
+    isQualitySwitching: Boolean = false,
+    // 🔥 [新增] 大会员状态
+    isVip: Boolean = false
 ) {
     var showQualityMenu by remember { mutableStateOf(false) }
     var isPlaying by remember { mutableStateOf(player.isPlaying) }
@@ -246,6 +248,7 @@ fun VideoPlayerOverlay(
                 qualityIds = qualityIds,
                 currentQuality = currentQualityLabel,
                 isLoggedIn = isLoggedIn,
+                isVip = isVip,  // 🔥 传入大会员状态
                 onQualitySelected = { index ->
                     onQualitySelected(index)
                     showQualityMenu = false
@@ -421,15 +424,16 @@ fun QualitySelectionMenu(
     qualities: List<String>,
     qualityIds: List<Int> = emptyList(), // 🔥 新增: 清晰度ID列表用于判断VIP要求
     currentQuality: String,
-    isLoggedIn: Boolean = false, // 🔥 新增: 是否已登录
+    isLoggedIn: Boolean = false, // 🔥 是否已登录
+    isVip: Boolean = false,      // 🔥 新增: 是否大会员
     onQualitySelected: (Int) -> Unit,
     onDismiss: () -> Unit
 ) {
     // 🔥 判断清晰度是否需要特殊权限
     fun getQualityTag(qualityId: Int): String? {
         return when (qualityId) {
-            127, 126, 125, 120 -> "大会员" // 8K, 杜比, HDR, 4K
-            116, 112 -> "大会员"          // 1080P60, 1080P+
+            127, 126, 125, 120 -> if (!isVip) "大会员" else null // 8K, 杜比, HDR, 4K - 需要大会员
+            116, 112 -> if (!isVip) "大会员" else null           // 1080P60, 1080P+ - 需要大会员
             80 -> if (!isLoggedIn) "登录" else null // 1080P 需要登录
             else -> null
         }

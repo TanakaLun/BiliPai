@@ -57,4 +57,33 @@ object FormatUtils {
         val percent = (progress.toFloat() / duration.toFloat() * 100).toInt()
         return if (percent >= 99) "已看完" else "已看$percent%"
     }
+    
+    /**
+     * 🔥 格式化发布时间 (相对时间 + 日期)
+     * 例如: "3小时前" / "昨天" / "2024-01-15"
+     */
+    fun formatPublishTime(timestampSeconds: Long): String {
+        if (timestampSeconds <= 0) return ""
+        
+        val now = System.currentTimeMillis()
+        val pubTime = timestampSeconds * 1000L
+        val diff = now - pubTime
+        
+        val seconds = diff / 1000
+        val minutes = seconds / 60
+        val hours = minutes / 60
+        val days = hours / 24
+        
+        return when {
+            seconds < 60 -> "刚刚"
+            minutes < 60 -> "${minutes}分钟前"
+            hours < 24 -> "${hours}小时前"
+            days == 1L -> "昨天"
+            days < 7 -> "${days}天前"
+            else -> {
+                val sdf = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault())
+                sdf.format(java.util.Date(pubTime))
+            }
+        }
+    }
 }

@@ -36,6 +36,9 @@ import coil.request.ImageRequest
 import com.android.purebilibili.core.theme.BiliPink
 import com.android.purebilibili.core.util.FormatUtils
 import com.android.purebilibili.feature.home.UserState
+import com.android.purebilibili.core.ui.LoadingAnimation
+import com.android.purebilibili.core.ui.BiliGradientButton
+import androidx.compose.material.icons.outlined.Login
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -80,7 +83,8 @@ fun ProfileScreen(
             when (val s = state) {
                 is ProfileUiState.Loading -> {
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator(color = BiliPink)
+                        // 🔥 使用 Lottie 加载动画
+                        LoadingAnimation(size = 80.dp)
                     }
                 }
                 is ProfileUiState.LoggedOut -> {
@@ -159,28 +163,15 @@ fun GuestProfileContent(onGoToLogin: () -> Unit) {
 
             Spacer(modifier = Modifier.height(48.dp))
 
-            // 登录按钮
-            Button(
+            // 🔥 登录按钮 - 使用现代化渐变按钮
+            BiliGradientButton(
+                text = "安全登录",
                 onClick = onGoToLogin,
-                colors = ButtonDefaults.buttonColors(containerColor = BiliPink),
-                shape = RoundedCornerShape(16.dp),
+                leadingIcon = Icons.Outlined.Login,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(56.dp),
-                elevation = ButtonDefaults.buttonElevation(defaultElevation = 8.dp)
-            ) {
-                Icon(
-                    Icons.Outlined.Login,
-                    contentDescription = null,
-                    modifier = Modifier.size(20.dp)
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    "安全登录",
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.SemiBold
-                )
-            }
+                    .height(56.dp)
+            )
 
             Spacer(modifier = Modifier.height(16.dp))
 

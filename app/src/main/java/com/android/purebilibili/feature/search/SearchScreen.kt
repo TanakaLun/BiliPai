@@ -45,6 +45,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.android.purebilibili.core.database.entity.SearchHistory
 import com.android.purebilibili.core.theme.BiliPink
+import com.android.purebilibili.core.ui.LoadingAnimation
 import com.android.purebilibili.feature.home.components.VideoGridItem
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -77,23 +78,18 @@ fun SearchScreen(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(
-                    Brush.verticalGradient(
-                        colors = listOf(
-                            Color(0xFFFFF5F5), // 淡粉
-                            Color(0xFFFFFAF0), // 淡橙
-                            Color(0xFFFFFFF0), // 淡黄
-                            Color(0xFFF0FFF4), // 淡绿
-                            Color(0xFFEBF8FF)  // 淡蓝
-                        )
-                    )
-                )
+                .background(MaterialTheme.colorScheme.background)
                 .padding(padding)
         ) {
             // --- 列表内容层 ---
             if (state.showResults) {
                 if (state.isSearching) {
-                    CircularProgressIndicator(modifier = Modifier.align(Alignment.Center), color = BiliPink)
+                    // 🔥 使用 Lottie 加载动画
+                    LoadingAnimation(
+                        modifier = Modifier.align(Alignment.Center),
+                        size = 80.dp,
+                        text = "搜索中..."
+                    )
                 } else if (state.error != null) {
                     Text(
                         text = state.error ?: "未知错误",
@@ -139,50 +135,40 @@ fun SearchScreen(
                             }
                             Spacer(modifier = Modifier.height(12.dp))
                             
-                            // 🔥 彩虹色热搜列表 (竖向)
-                            val hotColors = listOf(
-                                Color(0xFFFF6B6B), // 红
-                                Color(0xFFFF8E53), // 橙
-                                Color(0xFFFECA57), // 黄
-                                Color(0xFF48BB78), // 绿
-                                Color(0xFF4299E1), // 蓝
-                                Color(0xFF667EEA), // 紫
-                                Color(0xFFED64A6), // 粉
-                                Color(0xFF38B2AC), // 青
-                                Color(0xFFD69E2E), // 金
-                                Color(0xFF9F7AEA)  // 淡紫
-                            )
-                            
-                            Column(
-                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            // 🔥 简洁热搜 (横向流式布局)
+                            FlowRow(
+                                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                verticalArrangement = Arrangement.spacedBy(10.dp),
+                                modifier = Modifier.fillMaxWidth()
                             ) {
                                 state.hotList.take(10).forEachIndexed { index, hotItem ->
-                                    val itemColor = hotColors[index % hotColors.size]
+                                    val isTop3 = index < 3
                                     Surface(
-                                        color = itemColor.copy(alpha = 0.1f),
-                                        shape = RoundedCornerShape(12.dp),
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .clickable { viewModel.search(hotItem.keyword); keyboardController?.hide() }
+                                        color = Color.Transparent,
+                                        shape = RoundedCornerShape(20.dp),
+                                        border = androidx.compose.foundation.BorderStroke(
+                                            1.dp, 
+                                            if (isTop3) BiliPink.copy(alpha = 0.5f) else MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
+                                        ),
+                                        modifier = Modifier.clickable { viewModel.search(hotItem.keyword); keyboardController?.hide() }
                                     ) {
                                         Row(
                                             verticalAlignment = Alignment.CenterVertically,
-                                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)
+                                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)
                                         ) {
-                                            // 排名数字
-                                            Text(
-                                                "${index + 1}",
-                                                fontSize = 14.sp,
-                                                fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
-                                                color = itemColor,
-                                                modifier = Modifier.width(24.dp)
-                                            )
-                                            Spacer(modifier = Modifier.width(8.dp))
+                                            if (isTop3) {
+                                                Text(
+                                                    "${index + 1}",
+                                                    fontSize = 12.sp,
+                                                    fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                                                    color = BiliPink
+                                                )
+                                                Spacer(modifier = Modifier.width(4.dp))
+                                            }
                                             Text(
                                                 hotItem.show_name,
-                                                fontSize = 14.sp,
-                                                fontWeight = if (index < 3) androidx.compose.ui.text.font.FontWeight.Medium else androidx.compose.ui.text.font.FontWeight.Normal,
-                                                color = itemColor,
+                                                fontSize = 13.sp,
+                                                color = if (isTop3) BiliPink else MaterialTheme.colorScheme.onSurface,
                                                 maxLines = 1
                                             )
                                         }
@@ -216,7 +202,7 @@ fun SearchScreen(
                         Spacer(modifier = Modifier.height(24.dp))
                     }
                     
-                    // 🔥 热门推荐关键词 (竖向排列 + 多彩图标)
+                    // 🔥 推荐关键词 (横向流式布局)
                     item {
                         Text(
                             "🔖 推荐关键词",
@@ -225,44 +211,29 @@ fun SearchScreen(
                         )
                         Spacer(modifier = Modifier.height(12.dp))
                         
-                        // 每个关键词配一个 emoji 和颜色
-                        val suggestions = listOf(
-                            Triple("🎮", "原神", Color(0xFF48BB78)),      // 绿
-                            Triple("⚔️", "鬼灭之刃", Color(0xFFED8936)),  // 橙
-                            Triple("👑", "王者荣耀", Color(0xFFE53E3E)),  // 红
-                            Triple("📹", "VLOG", Color(0xFF4299E1)),      // 蓝
-                            Triple("🍜", "美食", Color(0xFFD69E2E)),      // 金
-                            Triple("💪", "健身", Color(0xFF38A169)),      // 深绿
-                            Triple("👗", "穿搭", Color(0xFFED64A6)),      // 粉
-                            Triple("💻", "编程教程", Color(0xFF667EEA)), // 紫
-                            Triple("🐱", "猫猫", Color(0xFFF6AD55)),      // 浅橙
-                            Triple("✈️", "旅行", Color(0xFF0BC5EA))      // 青
-                        )
+                        val suggestions = listOf("原神", "鬼灭之刃", "王者荣耀", "VLOG", "美食", "健身", "穿搭", "编程教程", "猫猫", "旅行")
                         
-                        Column(
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            verticalArrangement = Arrangement.spacedBy(10.dp),
+                            modifier = Modifier.fillMaxWidth()
                         ) {
-                            suggestions.forEach { (emoji, keyword, tintColor) ->
+                            suggestions.forEach { keyword ->
                                 Surface(
-                                    color = tintColor.copy(alpha = 0.1f),
-                                    shape = RoundedCornerShape(12.dp),
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clickable { viewModel.search(keyword); keyboardController?.hide() }
+                                    color = Color.Transparent,
+                                    shape = RoundedCornerShape(20.dp),
+                                    border = androidx.compose.foundation.BorderStroke(
+                                        1.dp, 
+                                        MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
+                                    ),
+                                    modifier = Modifier.clickable { viewModel.search(keyword); keyboardController?.hide() }
                                 ) {
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)
-                                    ) {
-                                        Text(emoji, fontSize = 20.sp)
-                                        Spacer(modifier = Modifier.width(12.dp))
-                                        Text(
-                                            keyword,
-                                            fontSize = 15.sp,
-                                            fontWeight = androidx.compose.ui.text.font.FontWeight.Medium,
-                                            color = tintColor
-                                        )
-                                    }
+                                    Text(
+                                        keyword,
+                                        fontSize = 13.sp,
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)
+                                    )
                                 }
                             }
                         }

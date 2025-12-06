@@ -84,6 +84,9 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         navResult.onSuccess { navData ->
             if (navData.isLogin) {
                 // 登录成功
+                val isVip = navData.vip.status == 1
+                // 🔥 缓存 VIP 状态供 PlayerViewModel 使用
+                com.android.purebilibili.core.store.TokenManager.isVipCache = isVip
                 newUserState = UserState(
                     isLogin = true,
                     face = navData.face,
@@ -91,10 +94,11 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                     level = navData.level_info.current_level,
                     coin = navData.money,
                     bcoin = navData.wallet.bcoin_balance,
-                    isVip = navData.vip.status == 1
+                    isVip = isVip
                 )
             } else {
                 // 🔥🔥 接口明确返回未登录，强制重置为 Guest
+                com.android.purebilibili.core.store.TokenManager.isVipCache = false
                 newUserState = UserState(isLogin = false)
             }
         }.onFailure {

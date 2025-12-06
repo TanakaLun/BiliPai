@@ -27,6 +27,10 @@ object TokenManager {
     // 🔥 [修复]：移除了 private set，允许 ApiClient 生成临时 ID 后写入
     @Volatile
     var buvid3Cache: String? = null
+    
+    // 🔥 [新增] VIP 状态缓存 (1=有效大会员, 0=非VIP)
+    @Volatile
+    var isVipCache: Boolean = false
 
     fun init(context: Context) {
         CoroutineScope(Dispatchers.IO).launch {

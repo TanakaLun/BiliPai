@@ -151,7 +151,9 @@ object NetworkModule {
                     cookieBuilder.append("SESSDATA=$sessData;")
                 }
 
-                builder.header("Cookie", cookieBuilder.toString())
+                val finalCookie = cookieBuilder.toString()
+                android.util.Log.d("ApiClient", "🔥 Sending request to ${original.url}, Cookie contains SESSDATA: ${sessData != null && sessData.isNotEmpty()}")
+                builder.header("Cookie", finalCookie)
 
                 chain.proceed(builder.build())
             }

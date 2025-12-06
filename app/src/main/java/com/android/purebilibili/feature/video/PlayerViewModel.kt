@@ -34,8 +34,9 @@ sealed class PlayerUiState {
         // 🔥 新增：清晰度切换状态
         val isQualitySwitching: Boolean = false,
         val requestedQuality: Int? = null, // 用户请求的清晰度，用于显示降级提示
-        // 🔥 新增：登录状态
+        // 🔥 登录与大会员状态
         val isLoggedIn: Boolean = false,
+        val isVip: Boolean = false,  // 🔥 新增：大会员状态
 
         // 移除评论相关状态: replies, isRepliesLoading, replyCount, repliesError, isRepliesEnd, nextPage
 
@@ -95,6 +96,40 @@ class PlayerViewModel : ViewModel() {
         player.playWhenReady = true
     }
 
+    // 🔥🔥 [新增] DASH 格式播放：合并视频和音频流
+    @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
+    private fun playDashVideo(videoUrl: String, audioUrl: String?, seekTo: Long = 0L) {
+        val player = exoPlayer ?: return
+        android.util.Log.d("PlayerVM", "🔥 playDashVideo: video=${videoUrl.take(50)}..., audio=${audioUrl?.take(50) ?: "null"}")
+        
+        val headers = mapOf(
+            "Referer" to "https://www.bilibili.com",
+            "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+        )
+        val dataSourceFactory = androidx.media3.datasource.okhttp.OkHttpDataSource.Factory(
+            com.android.purebilibili.core.network.NetworkModule.okHttpClient
+        ).setDefaultRequestProperties(headers)
+        
+        val mediaSourceFactory = androidx.media3.exoplayer.source.ProgressiveMediaSource.Factory(dataSourceFactory)
+        
+        val videoSource = mediaSourceFactory.createMediaSource(MediaItem.fromUri(videoUrl))
+        
+        val finalSource = if (audioUrl != null) {
+            val audioSource = mediaSourceFactory.createMediaSource(MediaItem.fromUri(audioUrl))
+            // 🔥 使用 MergingMediaSource 合并视频和音频
+            androidx.media3.exoplayer.source.MergingMediaSource(videoSource, audioSource)
+        } else {
+            videoSource
+        }
+        
+        player.setMediaSource(finalSource)
+        if (seekTo > 0) {
+            player.seekTo(seekTo)
+        }
+        player.prepare()
+        player.playWhenReady = true
+    }
+
     fun loadVideo(bvid: String) {
         if (bvid.isBlank()) return
         currentBvid = bvid
@@ -114,19 +149,32 @@ class PlayerViewModel : ViewModel() {
                 android.util.Log.d("PlayerVM", "Fetching danmaku for cid: $currentCid")
                 val danmaku = VideoRepository.getDanmakuRawData(info.cid)
                 android.util.Log.d("PlayerVM", "Danmaku data result: ${danmaku?.size ?: 0} bytes")
-                val url = playData.durl?.firstOrNull()?.url ?: ""
+                // 🔥 DASH 格式处理：分别获取视频和音频 URL
+                val dashVideo = playData.dash?.video?.firstOrNull()
+                val dashAudio = playData.dash?.audio?.firstOrNull()
+                val videoUrl = dashVideo?.baseUrl ?: playData.durl?.firstOrNull()?.url ?: ""
+                val audioUrl = dashAudio?.baseUrl  // 可能为 null
+                android.util.Log.d("PlayerVM", "🔥 DASH: video=${dashVideo?.id ?: "none"}, audio=${dashAudio?.id ?: "none"}")
+                
                 val qualities = playData.accept_quality ?: emptyList()
                 val labels = playData.accept_description ?: emptyList()
-                val realQuality = playData.quality
+                // 🔥 使用正在播放的 DASH 视频画质，而不是 durl 画质
+                val realQuality = dashVideo?.id ?: playData.quality
 
-                if (url.isNotEmpty()) {
-                    playVideo(url)
-                    // 🔥 获取登录状态
+                if (videoUrl.isNotEmpty()) {
+                    // 🔥 根据是否有音频流选择播放方式
+                    if (dashVideo != null) {
+                        playDashVideo(videoUrl, audioUrl, 0L)
+                    } else {
+                        playVideo(videoUrl)
+                    }
+                    // 🔥 获取登录状态和大会员状态
                     val isLogin = !com.android.purebilibili.core.store.TokenManager.sessDataCache.isNullOrEmpty()
+                    val isVip = com.android.purebilibili.core.store.TokenManager.isVipCache
                     
                     _uiState.value = PlayerUiState.Success(
                         info = info,
-                        playUrl = url,
+                        playUrl = videoUrl,
                         related = relatedVideos,
                         danmakuData = danmaku,
                         currentQuality = realQuality,
@@ -134,7 +182,8 @@ class PlayerViewModel : ViewModel() {
                         qualityLabels = labels,
                         startPosition = 0L,
                         emoteMap = emoteMap,
-                        isLoggedIn = isLogin
+                        isLoggedIn = isLogin,
+                        isVip = isVip
                     )
                     // 移除 loadComments 调用
                 } else {
@@ -192,21 +241,32 @@ class PlayerViewModel : ViewModel() {
         startPos: Long
     ) {
         // 调用 Repository 获取新画质链接
-        // 🔥 确保 VideoRepository.getPlayUrlData 已经接收 qn 参数
         val playUrlData = VideoRepository.getPlayUrlData(bvid, cid, qn)
 
-        val url = playUrlData?.durl?.firstOrNull()?.url ?: ""
+        // 🔥 DASH 格式处理：找到对应画质的视频，并获取最佳音频
+        val dashVideo = playUrlData?.dash?.video?.find { it.id == qn }
+            ?: playUrlData?.dash?.video?.firstOrNull()
+        val dashAudio = playUrlData?.dash?.audio?.firstOrNull()  // 选择最高质量音频
+        val videoUrl = dashVideo?.baseUrl ?: playUrlData?.durl?.firstOrNull()?.url ?: ""
+        val audioUrl = dashAudio?.baseUrl
+        android.util.Log.d("PlayerVM", "🔥 fetchAndPlay DASH: video=${dashVideo?.id ?: "none"}, audio=${dashAudio?.id ?: "none"}")
+        
         val qualities = playUrlData?.accept_quality ?: emptyList()
         val labels = playUrlData?.accept_description ?: emptyList()
-        val realQuality = playUrlData?.quality ?: qn
+        // 🔥 使用正在播放的 DASH 视频画质
+        val realQuality = dashVideo?.id ?: playUrlData?.quality ?: qn
 
-        if (url.isNotEmpty()) {
-            // 🔥 强制 ExoPlayer 重置，确保真正切换流
-            playVideo(url, startPos, forceReset = true)
+        if (videoUrl.isNotEmpty()) {
+            // 🔥 使用 DASH 播放（如果有音频流）或普通播放
+            if (dashVideo != null) {
+                playDashVideo(videoUrl, audioUrl, startPos)
+            } else {
+                playVideo(videoUrl, startPos, forceReset = true)
+            }
 
             // 🔥 切换完成，更新状态并清除切换标志
             _uiState.value = currentState.copy(
-                playUrl = url,
+                playUrl = videoUrl,
                 currentQuality = realQuality,
                 qualityIds = qualities,
                 qualityLabels = labels,

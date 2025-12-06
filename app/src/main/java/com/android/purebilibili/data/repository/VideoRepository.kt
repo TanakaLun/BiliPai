@@ -68,7 +68,10 @@ object VideoRepository {
             val playData = fetchPlayUrlRecursive(bvid, cid, startQuality)
                 ?: throw Exception("无法获取任何画质的播放地址")
 
-            if (playData.durl.isNullOrEmpty()) throw Exception("播放地址解析失败 (无 durl)")
+            // 🔥 支持 DASH 和 durl 两种格式
+            val hasDash = !playData.dash?.video.isNullOrEmpty()
+            val hasDurl = !playData.durl.isNullOrEmpty()
+            if (!hasDash && !hasDurl) throw Exception("播放地址解析失败 (无 dash/durl)")
 
             Result.success(Pair(info, playData))
         } catch (e: Exception) {
@@ -78,8 +81,15 @@ object VideoRepository {
     }
 
     suspend fun getPlayUrlData(bvid: String, cid: Long, qn: Int): PlayUrlData? = withContext(Dispatchers.IO) {
-        fetchPlayUrlWithWbi(bvid, cid, qn) ?: fetchPlayUrlRecursive(bvid, cid, qn)
+    // 🔥 简化策略：单次请求，如果 412 则等待 2s 后重试一次
+    var result = fetchPlayUrlWithWbi(bvid, cid, qn)
+    if (result == null) {
+        android.util.Log.d("VideoRepo", "🔥 First attempt failed, waiting 2s before retry...")
+        kotlinx.coroutines.delay(2000)
+        result = fetchPlayUrlWithWbi(bvid, cid, qn)
     }
+    result
+}
 
     // 🔥🔥 [稳定版核心修复] 获取评论列表
     suspend fun getComments(aid: Long, page: Int, ps: Int = 20): Result<ReplyData> = withContext(Dispatchers.IO) {
@@ -154,7 +164,12 @@ object VideoRepository {
     private suspend fun fetchPlayUrlRecursive(bvid: String, cid: Long, targetQn: Int): PlayUrlData? {
         try {
             val data = fetchPlayUrlWithWbi(bvid, cid, targetQn)
-            if (data != null && !data.durl.isNullOrEmpty()) return data
+            // 🔥 修复：只要 API 返回有效数据就使用，不再强制降级
+            // API 会自动返回用户权限允许的最高画质
+            if (data != null && (!data.durl.isNullOrEmpty() || !data.dash?.video.isNullOrEmpty())) {
+                android.util.Log.d("VideoRepo", "🔥 Got valid PlayUrl: requested=$targetQn, actual=${data.quality}")
+                return data
+            }
         } catch (e: Exception) {
             android.util.Log.w("VideoRepo", "fetchPlayUrlRecursive failed for qn=$targetQn: ${e.message}")
         }
@@ -168,8 +183,8 @@ object VideoRepository {
         }
         if (nextIndex == -1 || nextIndex >= QUALITY_CHAIN.size) return null
         
-        // 🔥 添加延迟防止 412 限流
-        kotlinx.coroutines.delay(500)
+        // 🔥 增加延迟到 1500ms 防止 412 限流
+        kotlinx.coroutines.delay(1500)
         return fetchPlayUrlRecursive(bvid, cid, QUALITY_CHAIN[nextIndex])
     }
 
@@ -182,11 +197,13 @@ object VideoRepository {
             val subKey = wbiImg.sub_url.substringAfterLast("/").substringBefore(".")
             val params = mapOf(
                 "bvid" to bvid, "cid" to cid.toString(), "qn" to qn.toString(),
-                "fnval" to "1", "fnver" to "0", "fourk" to "1", "platform" to "html5", "high_quality" to "1"
+                "fnval" to "16", "fnver" to "0", "fourk" to "1", "platform" to "html5", "high_quality" to "1"
             )
             val signedParams = WbiUtils.sign(params, imgKey, subKey)
             val response = api.getPlayUrl(signedParams)
-            android.util.Log.d("VideoRepo", "PlayUrl response: code=${response.code}, quality=${response.data?.quality}")
+            android.util.Log.d("VideoRepo", "🔥 PlayUrl response: code=${response.code}, requestedQn=$qn, returnedQuality=${response.data?.quality}, accept_quality=${response.data?.accept_quality}")
+            android.util.Log.d("VideoRepo", "🔥 accept_description=${response.data?.accept_description}")
+            android.util.Log.d("VideoRepo", "🔥 durl count=${response.data?.durl?.size}, first url length=${response.data?.durl?.firstOrNull()?.url?.length ?: 0}")
             if (response.code == 0) return response.data
             return null
         } catch (e: HttpException) {

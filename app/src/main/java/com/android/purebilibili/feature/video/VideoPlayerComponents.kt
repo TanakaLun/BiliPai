@@ -130,6 +130,40 @@ fun VideoHeaderSection(info: ViewInfo) {
 
         Spacer(modifier = Modifier.height(10.dp))
 
+        // 🔥 新增: 分区标签 + 发布时间
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // 分区标签
+            if (info.tname.isNotEmpty()) {
+                Surface(
+                    shape = RoundedCornerShape(4.dp),
+                    color = BiliPink.copy(alpha = 0.1f)
+                ) {
+                    Text(
+                        text = info.tname,
+                        fontSize = 11.sp,
+                        color = BiliPink,
+                        fontWeight = FontWeight.Medium,
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                    )
+                }
+                Spacer(modifier = Modifier.width(8.dp))
+            }
+            
+            // 发布时间
+            if (info.pubdate > 0) {
+                Text(
+                    text = FormatUtils.formatPublishTime(info.pubdate),
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+
         // 数据统计行（优化图标和间距）
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -190,39 +224,44 @@ fun ActionButtonsRow(info: ViewInfo, onCommentClick: () -> Unit) {
                 .padding(horizontal = 4.dp, vertical = 12.dp),
             horizontalArrangement = Arrangement.SpaceEvenly
         ) {
-            // 点赞
+            // 🔥 点赞 - 粉色
             ActionButton(
                 icon = Icons.Outlined.ThumbUp,
                 text = FormatUtils.formatStat(info.stat.like.toLong()),
+                iconColor = BiliPink,
                 iconSize = 26.dp
             )
 
-            // 投币 - 🔥 显示真实数据
+            // 🔥 投币 - 金色
             ActionButton(
                 icon = Icons.Default.MonetizationOn,
                 text = if (info.stat.coin > 0) FormatUtils.formatStat(info.stat.coin.toLong()) else "投币",
+                iconColor = Color(0xFFFFB300), // 金色
                 iconSize = 26.dp
             )
 
-            // 收藏 - 🔥 显示真实数据
+            // 🔥 收藏 - 黄色
             ActionButton(
                 icon = Icons.Outlined.Star,
                 text = if (info.stat.favorite > 0) FormatUtils.formatStat(info.stat.favorite.toLong()) else "收藏",
+                iconColor = Color(0xFFFFC107), // 琥珀黄
                 iconSize = 26.dp
             )
 
-            // 分享 - 🔥 显示真实数据
+            // 🔥 分享 - 蓝色
             ActionButton(
                 icon = Icons.Outlined.Share,
                 text = if (info.stat.share > 0) FormatUtils.formatStat(info.stat.share.toLong()) else "分享",
+                iconColor = Color(0xFF2196F3), // 蓝色
                 iconSize = 26.dp
             )
 
-            // 评论
+            // 🔥 评论 - 青色
             val replyCount = runCatching { info.stat.reply }.getOrDefault(0)
             ActionButton(
                 icon = Icons.Outlined.Comment,
                 text = if (replyCount > 0) FormatUtils.formatStat(replyCount.toLong()) else "评论",
+                iconColor = Color(0xFF00BCD4), // 青色
                 onClick = onCommentClick,
                 iconSize = 26.dp
             )
@@ -230,12 +269,13 @@ fun ActionButtonsRow(info: ViewInfo, onCommentClick: () -> Unit) {
     }
 }
 
-// 🔥 优化版 ActionButton - 带按压动画和更好的视觉效果
+// 🔥 优化版 ActionButton - 带按压动画和彩色图标
 @Composable
 fun ActionButton(
     icon: ImageVector,
     text: String,
     isActive: Boolean = false,
+    iconColor: Color = MaterialTheme.colorScheme.onSurfaceVariant, // 🔥 新增颜色参数
     iconSize: androidx.compose.ui.unit.Dp = 24.dp,
     onClick: () -> Unit = {}
 ) {
@@ -266,21 +306,18 @@ fun ActionButton(
                 indication = null
             ) { onClick() }
     ) {
-        // 🔥 图标容器 - 添加微妙的背景
+        // 🔥 图标容器 - 使用彩色背景
         Box(
             modifier = Modifier
                 .size(44.dp)
                 .clip(CircleShape)
-                .background(
-                    if (isActive) BiliPink.copy(alpha = 0.1f) 
-                    else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
-                ),
+                .background(iconColor.copy(alpha = 0.1f)), // 🔥 使用传入颜色的淡色背景
             contentAlignment = Alignment.Center
         ) {
             Icon(
                 imageVector = icon,
                 contentDescription = null,
-                tint = if (isActive) BiliPink else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f),
+                tint = iconColor, // 🔥 直接使用传入的颜色
                 modifier = Modifier.size(iconSize)
             )
         }
@@ -288,8 +325,8 @@ fun ActionButton(
         Text(
             text = text,
             fontSize = 11.sp,
-            color = if (isActive) BiliPink else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.85f),
-            fontWeight = if (isActive) FontWeight.SemiBold else FontWeight.Normal,
+            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.85f),
+            fontWeight = FontWeight.Normal,
             maxLines = 1
         )
     }

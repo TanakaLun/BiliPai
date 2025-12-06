@@ -158,38 +158,60 @@ class VideoPlayerState(
 
                 // 🔥 在主线程绑定到 View
                 launch(Dispatchers.Main) {
+                    // 🔥🔥 关键修复：清除旧的弹幕状态
+                    if (danmakuView.isPrepared) {
+                        android.util.Log.d("Danmaku", "Stopping old danmaku before re-prepare")
+                        danmakuView.stop()
+                        danmakuView.clearDanmakusOnScreen()
+                    }
+                    // 🔥🔥 辅助函数：启动弹幕
+                    fun startDanmakuIfReady() {
+                        if (danmakuView.width > 0 && danmakuView.height > 0 && isDanmakuOn) {
+                            val pos = player.currentPosition
+                            android.util.Log.d("Danmaku", "✅ Starting danmaku: ${danmakuView.width}x${danmakuView.height}, pos=${pos}ms")
+                            danmakuView.show()
+                            danmakuView.start(pos)
+                            // 🔥🔥 关键修复：立即 seekTo 确保同步
+                            danmakuView.seekTo(pos)
+                            android.util.Log.d("Danmaku", "✅ Called start() and seekTo($pos)")
+                        }
+                    }
+                    
                     // 🔥🔥 关键修复：设置 Callback 监听 prepared 事件
                     danmakuView.setCallback(object : master.flame.danmaku.controller.DrawHandler.Callback {
                         override fun prepared() {
-                            // 🔥🔥 关键：Callback 可能在后台线程调用，必须切回主线程访问 Player
                             android.os.Handler(android.os.Looper.getMainLooper()).post {
                                 val viewWidth = danmakuView.width
                                 val viewHeight = danmakuView.height
-                                val isAttached = danmakuView.isAttachedToWindow
-                                android.util.Log.d("Danmaku", "DanmakuView prepared! isDanmakuOn=$isDanmakuOn, currentPos=${player.currentPosition}ms")
-                                android.util.Log.d("Danmaku", "DanmakuView dimensions: ${viewWidth}x${viewHeight}, attached=$isAttached")
+                                android.util.Log.d("Danmaku", "DanmakuView prepared! Size: ${viewWidth}x${viewHeight}")
                                 
+                                // 🔥🔥 关键修复：如果尺寸为0，使用 OnLayoutChangeListener 等待布局完成
                                 if (viewWidth == 0 || viewHeight == 0) {
-                                    android.util.Log.e("Danmaku", "⚠️ DanmakuView has ZERO dimensions! Cannot render danmaku")
+                                    android.util.Log.w("Danmaku", "⚠️ ZERO dimensions, adding OnLayoutChangeListener")
+                                    danmakuView.addOnLayoutChangeListener(object : android.view.View.OnLayoutChangeListener {
+                                        override fun onLayoutChange(
+                                            v: android.view.View?, left: Int, top: Int, right: Int, bottom: Int,
+                                            oldLeft: Int, oldTop: Int, oldRight: Int, oldBottom: Int
+                                        ) {
+                                            val w = right - left
+                                            val h = bottom - top
+                                            android.util.Log.d("Danmaku", "OnLayoutChange: ${w}x${h}")
+                                            if (w > 0 && h > 0) {
+                                                danmakuView.removeOnLayoutChangeListener(this)
+                                                startDanmakuIfReady()
+                                            }
+                                        }
+                                    })
+                                    // 强制请求布局
+                                    danmakuView.requestLayout()
+                                    return@post
                                 }
                                 
-                                if (isDanmakuOn) {
-                                    android.util.Log.d("Danmaku", "Calling danmakuView.show() and start()")
-                                    try {
-                                        danmakuView.show()
-                                        danmakuView.start(player.currentPosition)
-                                        android.util.Log.d("Danmaku", "✅ show() and start() called successfully")
-                                    } catch (e: Exception) {
-                                        android.util.Log.e("Danmaku", "❌ Error calling show/start", e)
-                                    }
-                                } else {
-                                    android.util.Log.w("Danmaku", "isDanmakuOn is false, skipping start()")
-                                }
+                                startDanmakuIfReady()
                             }
                         }
                         override fun updateTimer(timer: master.flame.danmaku.danmaku.model.DanmakuTimer) {}
                         override fun danmakuShown(danmaku: master.flame.danmaku.danmaku.model.BaseDanmaku?) {
-                            // 🔥 添加日志：确认弹幕被显示
                             android.util.Log.d("Danmaku", "danmakuShown: ${danmaku?.text?.take(20)}")
                         }
                         override fun drawingFinished() {}
@@ -212,8 +234,6 @@ class VideoPlayerState(
                     danmakuView.showFPS(false)
                     danmakuView.enableDanmakuDrawingCache(true)
                     
-                    // 🔥 先调用 show() 确保可见
-                    android.util.Log.d("Danmaku", "Initial show() call, isDanmakuOn=$isDanmakuOn")
                     if (isDanmakuOn) {
                         danmakuView.show()
                     }
@@ -325,15 +345,29 @@ fun rememberVideoPlayerState(
         }
     }
 
-    LaunchedEffect(player.isPlaying) {
+    // 🔥 弹幕同步循环 - 持续同步弹幕位置
+    LaunchedEffect(player, danmakuView) {
         while (true) {
             if (danmakuView.isPrepared && holder.isDanmakuOn) {
-                if (player.isPlaying) {
-                    if (danmakuView.isPaused) danmakuView.resume()
-                    if (abs(player.currentPosition - danmakuView.currentTime) > 1000) {
-                        danmakuView.seekTo(player.currentPosition)
+                val playerPos = player.currentPosition
+                val danmakuPos = danmakuView.currentTime
+                val isPlaying = player.isPlaying
+                
+                if (isPlaying) {
+                    if (danmakuView.isPaused) {
+                        android.util.Log.d("DanmakuSync", "Resuming danmaku")
+                        danmakuView.resume()
                     }
-                } else if (!danmakuView.isPaused) danmakuView.pause()
+                    // 如果偏差超过 1 秒，同步
+                    if (abs(playerPos - danmakuPos) > 1000) {
+                        android.util.Log.d("DanmakuSync", "Syncing: player=$playerPos, danmaku=$danmakuPos")
+                        danmakuView.seekTo(playerPos)
+                    }
+                } else {
+                    if (!danmakuView.isPaused) {
+                        danmakuView.pause()
+                    }
+                }
             }
             kotlinx.coroutines.delay(500)
         }

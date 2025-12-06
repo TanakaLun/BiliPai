@@ -19,6 +19,8 @@ data class ViewInfo(
     val title: String = "",
     val desc: String = "",
     val pic: String = "",
+    val pubdate: Long = 0,  // 🔥 新增: 发布时间戳 (秒)
+    val tname: String = "", // 🔥 新增: 分区名称
     val owner: Owner = Owner(),
     val stat: Stat = Stat(),
     val pages: List<Page> = emptyList()

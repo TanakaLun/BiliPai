@@ -33,6 +33,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.android.purebilibili.core.store.TokenManager
 import com.android.purebilibili.core.theme.BiliPink
+import com.android.purebilibili.core.ui.LoadingAnimation
 import kotlinx.coroutines.launch
 
 @Composable
@@ -267,30 +268,14 @@ fun QrCodeLoginContent(
 
 @Composable
 private fun LoadingQrCode() {
-    val infiniteTransition = rememberInfiniteTransition(label = "loading")
-    val rotation by infiniteTransition.animateFloat(
-        initialValue = 0f,
-        targetValue = 360f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(1200, easing = LinearEasing)
-        ),
-        label = "rotation"
-    )
-
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
-        CircularProgressIndicator(
-            color = BiliPink,
-            strokeWidth = 3.dp,
-            modifier = Modifier.size(48.dp)
-        )
-        Spacer(modifier = Modifier.height(16.dp))
-        Text(
-            text = "正在加载...",
-            color = Color.Gray,
-            fontSize = 14.sp
+        // 🔥 使用 Lottie 加载动画
+        LoadingAnimation(
+            size = 64.dp,
+            text = "正在加载..."
         )
     }
 }
@@ -614,7 +599,7 @@ fun WebLoginContent(
                 
                 if (isLoading) {
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                         CircularProgressIndicator(color = BiliPink)
+                        LoadingAnimation(size = 60.dp)
                     }
                 }
             }

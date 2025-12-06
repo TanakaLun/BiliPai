@@ -29,6 +29,9 @@ import com.android.purebilibili.feature.home.components.BottomNavItem
 import com.android.purebilibili.feature.home.components.ElegantVideoCard
 import com.android.purebilibili.feature.home.components.FluidHomeTopBar
 import com.android.purebilibili.feature.home.components.FrostedBottomBar
+import com.android.purebilibili.core.ui.LoadingAnimation
+import com.android.purebilibili.core.ui.VideoCardSkeleton
+import com.android.purebilibili.core.ui.ErrorState as ModernErrorState
 
 @SuppressLint("UnusedMaterial3ScaffoldPaddingParameter")
 @OptIn(ExperimentalMaterial3Api::class)
@@ -78,14 +81,9 @@ fun HomeScreen(
     val bottomBarHeight = 56.dp + navBarHeight
 
     val prefs = remember { context.getSharedPreferences("app_prefs", Context.MODE_PRIVATE) }
-    var showWelcomeDialog by remember { mutableStateOf(false) }
     
     // 🔥 当前选中的导航项
     var currentNavItem by remember { mutableStateOf(BottomNavItem.HOME) }
-
-    LaunchedEffect(Unit) {
-        if (prefs.getBoolean("is_first_run", true)) showWelcomeDialog = true
-    }
 
     val shouldLoadMore by remember {
         derivedStateOf {
@@ -115,11 +113,27 @@ fun HomeScreen(
         ) {
             // 1. 底层：视频列表
             if (state.isLoading && state.videos.isEmpty()) {
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(color = BiliPink)
+                // 🔥 骨架屏加载动画
+                LazyVerticalGrid(
+                    columns = GridCells.Fixed(2),
+                    contentPadding = PaddingValues(
+                        start = 16.dp,
+                        end = 16.dp,
+                        top = contentTopPadding,
+                        bottom = bottomBarHeight + 20.dp
+                    ),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                    modifier = Modifier.fillMaxSize()
+                ) {
+                    items(6) { VideoCardSkeleton() }
                 }
             } else if (state.error != null && state.videos.isEmpty()) {
-                ErrorState(state.error!!) { viewModel.refresh() }
+                // 🔥 使用现代化错误组件
+                ModernErrorState(
+                    message = state.error ?: "加载失败",
+                    onRetry = { viewModel.refresh() }
+                )
             } else {
                 LazyVerticalGrid(
                     state = gridState,
@@ -195,13 +209,6 @@ fun HomeScreen(
                 modifier = Modifier.align(Alignment.BottomCenter),
                 visibleCoverUrl = visibleCoverUrl
             )
-        }
-    }
-
-    if (showWelcomeDialog) {
-        WelcomeDialog(GITHUB_URL) {
-            prefs.edit().putBoolean("is_first_run", false).apply()
-            showWelcomeDialog = false
         }
     }
 }
