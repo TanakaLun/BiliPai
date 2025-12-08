@@ -247,7 +247,7 @@ fun VideoPlayerSection(
                         // 🔥 确保在最顶层
                         view.bringToFront()
                     },
-                    modifier = Modifier.fillMaxSize()
+                    modifier = Modifier.fillMaxSize().zIndex(10f)  // 🔥 确保弹幕在最顶层
                 )
             }
         }

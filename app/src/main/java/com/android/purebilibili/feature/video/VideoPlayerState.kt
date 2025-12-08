@@ -181,7 +181,8 @@ class VideoPlayerState(
                     // 🔥🔥 关键修复：设置 Callback 监听 prepared 事件
                     danmakuView.setCallback(object : master.flame.danmaku.controller.DrawHandler.Callback {
                         override fun prepared() {
-                            android.os.Handler(android.os.Looper.getMainLooper()).post {
+                            // 🔥 使用 postDelayed 确保布局完全完成
+                            android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
                                 val viewWidth = danmakuView.width
                                 val viewHeight = danmakuView.height
                                 android.util.Log.d("Danmaku", "DanmakuView prepared! Size: ${viewWidth}x${viewHeight}")
@@ -205,11 +206,11 @@ class VideoPlayerState(
                                     })
                                     // 强制请求布局
                                     danmakuView.requestLayout()
-                                    return@post
+                                    return@postDelayed
                                 }
                                 
                                 startDanmakuIfReady()
-                            }
+                            }, 150)  // 🔥 延迟 150ms 确保 Compose 布局完成
                         }
                         override fun updateTimer(timer: master.flame.danmaku.danmaku.model.DanmakuTimer) {}
                         override fun danmakuShown(danmaku: master.flame.danmaku.danmaku.model.BaseDanmaku?) {
@@ -337,14 +338,7 @@ fun rememberVideoPlayerState(
             .build()
     }
 
-    val danmakuContext = remember {
-        DanmakuContext.create().apply {
-            setDanmakuStyle(0, 3f)
-            isDuplicateMergingEnabled = true
-            setScrollSpeedFactor(1.2f)
-            setScaleTextSize(1.0f)
-        }
-    }
+    // 🔥 [清理] 删除了未使用的 danmakuContext 变量，实际在 loadDanmaku() 中创建
     val danmakuView = remember(context) { DanmakuView(context) }
     
     // 🔥 性能优化：使用 rememberCoroutineScope 创建受管理的协程作用域
