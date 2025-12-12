@@ -24,10 +24,12 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.dp
 import androidx.core.view.WindowCompat
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.android.purebilibili.core.theme.BiliPink
 import com.android.purebilibili.feature.settings.GITHUB_URL
 import com.android.purebilibili.core.store.SettingsManager // 🔥 引入 SettingsManager
+import com.android.purebilibili.feature.settings.AppThemeMode
 // 🔥 从 components 包导入拆分后的组件
 import com.android.purebilibili.feature.home.components.BottomNavItem
 import com.android.purebilibili.feature.home.components.ElegantVideoCard
@@ -66,13 +68,22 @@ fun HomeScreen(
     val gridState = rememberLazyGridState()
     val hazeState = remember { HazeState() }
 
-
+    // 🔥 获取用户设置的主题模式
+    val themeMode by SettingsManager.getThemeMode(context).collectAsState(initial = AppThemeMode.FOLLOW_SYSTEM)
+    val systemInDark = isSystemInDarkTheme()
+    // 🔥 根据用户设置决定是否为深色模式
+    val isDarkTheme = when (themeMode) {
+        AppThemeMode.FOLLOW_SYSTEM -> systemInDark
+        AppThemeMode.LIGHT -> false
+        AppThemeMode.DARK -> true
+    }
 
     val view = LocalView.current
     if (!view.isInEditMode) {
         SideEffect {
             val window = (view.context as Activity).window
-            WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = true
+            // 🔥 根据主题动态设置状态栏图标颜色：浅色主题用深色图标，深色主题用浅色图标
+            WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = !isDarkTheme
             window.statusBarColor = Color.Transparent.toArgb()
             window.navigationBarColor = Color.Transparent.toArgb()
         }
