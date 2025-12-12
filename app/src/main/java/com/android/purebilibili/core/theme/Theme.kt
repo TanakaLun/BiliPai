@@ -34,8 +34,8 @@ private fun createLightColorScheme(primaryColor: Color) = lightColorScheme(
     primary = primaryColor,
     onPrimary = White,
     secondary = primaryColor.copy(alpha = 0.8f),
-    background = BiliBackground,
-    surface = White,
+    background = Color(0xFFF5F5F5),  // 🔥 柔和浅灰背景
+    surface = Color(0xFFFAFAFA),     // 🔥 微灰表面，不再纯白
     onSurface = TextPrimary,
     surfaceVariant = LightSurfaceVariant,
     onSurfaceVariant = TextSecondary

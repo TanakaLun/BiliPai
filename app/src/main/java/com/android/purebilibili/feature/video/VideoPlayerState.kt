@@ -11,13 +11,13 @@ import android.graphics.drawable.BitmapDrawable
 import android.net.Uri
 import android.os.Build
 import android.view.WindowManager
-import java.io.InputStream
 import androidx.activity.ComponentActivity
 import androidx.compose.runtime.*
 import androidx.core.app.NotificationCompat
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.MediaMetadata
+import androidx.media3.common.Player
 import androidx.media3.datasource.okhttp.OkHttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
@@ -32,12 +32,8 @@ import com.android.purebilibili.core.network.NetworkModule
 import com.android.purebilibili.core.util.FormatUtils
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
-import master.flame.danmaku.danmaku.model.android.DanmakuContext
-import master.flame.danmaku.ui.widget.DanmakuView
-import kotlin.math.abs
 
 private const val NOTIFICATION_ID = 1001
 private const val CHANNEL_ID = "media_playback_channel"
@@ -47,13 +43,10 @@ private const val THEME_COLOR = 0xFFFB7299.toInt()
 class VideoPlayerState(
     val context: Context,
     val player: ExoPlayer,
-    val danmakuView: DanmakuView,
     val mediaSession: MediaSession,
     // 🔥 性能优化：传入受管理的 CoroutineScope，避免内存泄漏
     private val scope: CoroutineScope
 ) {
-    var isDanmakuOn by mutableStateOf(true)
-
     fun updateMediaMetadata(title: String, artist: String, coverUrl: String) {
         val currentItem = player.currentMediaItem ?: return
 
@@ -139,139 +132,6 @@ class VideoPlayerState(
             notificationManager.notify(NOTIFICATION_ID, builder.build())
         } catch (e: SecurityException) {
             e.printStackTrace()
-        }
-    }
-
-    fun loadDanmaku(data: ByteArray) {
-        if (data.isEmpty()) {
-            android.util.Log.w("Danmaku", "Empty danmaku data, skip loading")
-            return
-        }
-        scope.launch(Dispatchers.IO) {
-            try {
-                android.util.Log.d("Danmaku", "Loading danmaku, data size: ${data.size} bytes")
-                // 🔥 在主线程处理所有 UI/Context 相关逻辑
-                launch(Dispatchers.Main) {
-                    val stream = java.io.ByteArrayInputStream(data)
-                    
-                    // 🔥 创建 Context 并配置
-                    val danmakuContext = DanmakuContext.create()
-                    danmakuContext.setDanmakuStyle(master.flame.danmaku.danmaku.model.IDisplayer.DANMAKU_STYLE_STROKEN, 3f)
-                        .setDuplicateMergingEnabled(false)  // 🔥 禁用重复合并
-                        .setScrollSpeedFactor(1.2f)        // 🔥 设置滚动速度
-                        .setScaleTextSize(1.2f)            // 🔥 稍微放大字体
-                        // 🔥 禁用重叠过滤，确保能显示多少显示多少
-                        .preventOverlapping(mapOf<Int, Boolean>(
-                            master.flame.danmaku.danmaku.model.BaseDanmaku.TYPE_SCROLL_RL to false,
-                            master.flame.danmaku.danmaku.model.BaseDanmaku.TYPE_SCROLL_LR to false,
-                            master.flame.danmaku.danmaku.model.BaseDanmaku.TYPE_FIX_TOP to false,
-                            master.flame.danmaku.danmaku.model.BaseDanmaku.TYPE_FIX_BOTTOM to false
-                        ))
-                    
-                    // 🔥 创建解析器 (传入 Context)
-                    val parser = com.android.purebilibili.core.util.BiliDanmakuParser(danmakuContext).apply {
-                        load(com.android.purebilibili.core.util.StreamDataSource(stream))
-                    }
-
-                    // 🔥🔥 关键修复：清除旧的弹幕状态
-                    if (danmakuView.isPrepared) {
-                        android.util.Log.d("Danmaku", "Stopping old danmaku before re-prepare")
-                        danmakuView.stop()
-                        danmakuView.clearDanmakusOnScreen()
-                    }
-                    // 🔥🔥 辅助函数：启动弹幕
-                    fun startDanmakuIfReady() {
-                        if (danmakuView.width > 0 && danmakuView.height > 0 && isDanmakuOn) {
-                            val pos = player.currentPosition
-                            android.util.Log.d("Danmaku", "✅ Starting danmaku: ${danmakuView.width}x${danmakuView.height}, pos=${pos}ms")
-                            
-                            danmakuView.show()
-                            danmakuView.start(pos)
-                            danmakuView.seekTo(pos)
-                            
-                            // 🔥🔥 关键修复：使用 Handler 循环检查并重试 resume
-                            val handler = android.os.Handler(android.os.Looper.getMainLooper())
-                            var retryCount = 0
-                            val maxRetry = 10
-                            
-                            fun tryResume() {
-                                if (retryCount >= maxRetry) {
-                                    android.util.Log.e("Danmaku", "❌ Failed to resume after $maxRetry retries")
-                                    return
-                                }
-                                retryCount++
-                                danmakuView.resume()
-                                
-                                // 延迟检查是否成功 resume
-                                handler.postDelayed({
-                                    if (danmakuView.isPaused && danmakuView.isPrepared) {
-                                        android.util.Log.w("Danmaku", "⚠️ Still paused after resume(), retry #$retryCount, isShown=${danmakuView.isShown}")
-                                        tryResume()
-                                    } else {
-                                        android.util.Log.d("Danmaku", "✅ Resume successful! isPaused=${danmakuView.isPaused}")
-                                    }
-                                }, 100)
-                            }
-                            // 启动检查
-                            tryResume()
-                        } else {
-                            android.util.Log.w("Danmaku", "❌ startDanmakuIfReady skipped: width=${danmakuView.width}, height=${danmakuView.height}, isDanmakuOn=$isDanmakuOn")
-                        }
-                    }
-                    
-                    // 🔥🔥 关键修复：设置 Callback 监听 prepared 事件
-                    danmakuView.setCallback(object : master.flame.danmaku.controller.DrawHandler.Callback {
-                        override fun prepared() {
-                            // 🔥 使用 postDelayed 确保布局完全完成
-                            android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
-                                val viewWidth = danmakuView.width
-                                val viewHeight = danmakuView.height
-                                android.util.Log.d("Danmaku", "DanmakuView prepared! Size: ${viewWidth}x${viewHeight}")
-                                
-                                // 🔥🔥 关键修复：如果尺寸为0，使用 OnLayoutChangeListener 等待布局完成
-                                if (viewWidth == 0 || viewHeight == 0) {
-                                    android.util.Log.w("Danmaku", "⚠️ ZERO dimensions, adding OnLayoutChangeListener")
-                                    danmakuView.addOnLayoutChangeListener(object : android.view.View.OnLayoutChangeListener {
-                                        override fun onLayoutChange(
-                                            v: android.view.View?, left: Int, top: Int, right: Int, bottom: Int,
-                                            oldLeft: Int, oldTop: Int, oldRight: Int, oldBottom: Int
-                                        ) {
-                                            val w = right - left
-                                            val h = bottom - top
-                                            android.util.Log.d("Danmaku", "OnLayoutChange: ${w}x${h}")
-                                            if (w > 0 && h > 0) {
-                                                danmakuView.removeOnLayoutChangeListener(this)
-                                                startDanmakuIfReady()
-                                            }
-                                        }
-                                    })
-                                    // 强制请求布局
-                                    danmakuView.requestLayout()
-                                    return@postDelayed
-                                }
-                                
-                                startDanmakuIfReady()
-                            }, 150)  // 🔥 延迟 150ms 确保 Compose 布局完成
-                        }
-                        override fun updateTimer(timer: master.flame.danmaku.danmaku.model.DanmakuTimer) {}
-                        override fun danmakuShown(danmaku: master.flame.danmaku.danmaku.model.BaseDanmaku?) {
-                            android.util.Log.d("Danmaku", "danmakuShown: ${danmaku?.text?.take(20)}")
-                        }
-                        override fun drawingFinished() {}
-                    })
-                    
-                    android.util.Log.d("Danmaku", "Calling danmakuView.prepare()")
-                    danmakuView.prepare(parser, danmakuContext)
-                    danmakuView.showFPS(false)
-                    danmakuView.enableDanmakuDrawingCache(true)
-                    
-                    if (isDanmakuOn) {
-                        danmakuView.show()
-                    }
-                }
-            } catch (e: Exception) {
-                android.util.Log.e("Danmaku", "Failed to load danmaku", e)
-            }
         }
     }
 }
@@ -367,15 +227,11 @@ fun rememberVideoPlayerState(
             .build()
     }
 
-    // 🔥 [清理] 删除了未使用的 danmakuContext 变量，实际在 loadDanmaku() 中创建
-    // 🔥 使用 DanmakuView（不是 TextureView，因为 TextureView 的 Surface 初始化有问题）
-    val danmakuView = remember(context) { DanmakuView(context) }
-    
     // 🔥 性能优化：使用 rememberCoroutineScope 创建受管理的协程作用域
     val scope = rememberCoroutineScope()
 
-    val holder = remember(player, danmakuView, mediaSession, scope) {
-        VideoPlayerState(context, player, danmakuView, mediaSession, scope)
+    val holder = remember(player, mediaSession, scope) {
+        VideoPlayerState(context, player, mediaSession, scope)
     }
 
     val uiState by viewModel.uiState.collectAsState()
@@ -386,7 +242,7 @@ fun rememberVideoPlayerState(
         }
     }
 
-    DisposableEffect(player, danmakuView, mediaSession) {
+    DisposableEffect(player, mediaSession) {
         onDispose {
             val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
             notificationManager.cancel(NOTIFICATION_ID)
@@ -396,13 +252,11 @@ fun rememberVideoPlayerState(
             if (miniPlayerManager.isMiniMode && miniPlayerManager.isActive) {
                 // 小窗模式下不释放 player，只释放其他资源
                 android.util.Log.d("VideoPlayerState", "🔥 小窗模式激活，不释放 player")
-                danmakuView.release()
             } else {
                 // 正常释放所有资源
                 android.util.Log.d("VideoPlayerState", "🔥 释放所有资源")
                 mediaSession.release()
                 player.release()
-                danmakuView.release()
             }
             
             (context as? ComponentActivity)?.window?.attributes?.screenBrightness =
@@ -410,49 +264,48 @@ fun rememberVideoPlayerState(
         }
     }
 
-    LaunchedEffect(bvid) { viewModel.loadVideo(bvid) }
-    LaunchedEffect(player) { viewModel.attachPlayer(player) }
+    // 🔥🔥 [新增] 监听播放器错误，自动重试
+    var hasRetried by remember { mutableStateOf(false) }
     
-    // 🔥 监听弹幕数据并在加载后初始化弹幕（仅执行一次）
-    val danmakuData = (uiState as? PlayerUiState.Success)?.danmakuData
-    LaunchedEffect(danmakuData) {
-        android.util.Log.d("VideoPlayerState", "LaunchedEffect(danmakuData): data size = ${danmakuData?.size ?: 0}")
-        if (danmakuData != null && danmakuData.isNotEmpty()) {
-            android.util.Log.d("VideoPlayerState", "Calling holder.loadDanmaku()")
-            holder.loadDanmaku(danmakuData)
+    DisposableEffect(player) {
+        val listener = object : Player.Listener {
+            override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
+                android.util.Log.e("VideoPlayerState", "❌ Player error: ${error.message}, code=${error.errorCode}")
+                // 🔥 首次错误自动重试一次
+                if (!hasRetried) {
+                    hasRetried = true
+                    android.util.Log.d("VideoPlayerState", "🔄 Auto-retrying video load...")
+                    viewModel.retry()
+                }
+            }
+            
+            override fun onPlaybackStateChanged(playbackState: Int) {
+                if (playbackState == Player.STATE_READY) {
+                    // 播放成功，重置重试标记
+                    hasRetried = false
+                }
+            }
+        }
+        player.addListener(listener)
+        onDispose {
+            player.removeListener(listener)
         }
     }
 
-    // 🔥 弹幕同步循环 - 持续同步弹幕位置
-    LaunchedEffect(player, danmakuView) {
-        while (true) {
-            if (danmakuView.isPrepared && holder.isDanmakuOn) {
-                val playerPos = player.currentPosition
-                val danmakuPos = danmakuView.currentTime
-                val isPlaying = player.isPlaying
-                
-                if (isPlaying) {
-                    if (danmakuView.isPaused) {
-                        android.util.Log.d("DanmakuSync", "Resuming danmaku")
-                        danmakuView.resume()
-                    }
-                    // 如果偏差超过 1 秒，同步
-                    if (abs(playerPos - danmakuPos) > 1000) {
-                        android.util.Log.d("DanmakuSync", "Syncing: player=$playerPos, danmaku=$danmakuPos")
-                        danmakuView.seekTo(playerPos)
-                    }
-                } else {
-                    if (!danmakuView.isPaused) {
-                        danmakuView.pause()
-                    }
-                }
-            }
-            kotlinx.coroutines.delay(500)
+    // 🔥🔥 [优化] 优先从缓存恢复，避免网络重载
+    LaunchedEffect(bvid, reuseFromMiniPlayer) {
+        val cachedState = miniPlayerManager.consumeCachedUiState()
+        if (reuseFromMiniPlayer && cachedState != null && cachedState.info.bvid == bvid) {
+            // 🔥 从小窗返回，使用缓存的 UI 状态
+            val currentPosition = miniPlayerManager.player?.currentPosition ?: 0L
+            android.util.Log.d("VideoPlayerState", "🔥 从缓存恢复 UI 状态: ${cachedState.info.title}, position=$currentPosition")
+            viewModel.restoreFromCache(cachedState, currentPosition)
+        } else {
+            // 正常加载
+            viewModel.loadVideo(bvid)
         }
     }
-    LaunchedEffect(holder.isDanmakuOn) {
-        if (holder.isDanmakuOn) danmakuView.show() else danmakuView.hide()
-    }
+    LaunchedEffect(player) { viewModel.attachPlayer(player) }
 
     return holder
 }

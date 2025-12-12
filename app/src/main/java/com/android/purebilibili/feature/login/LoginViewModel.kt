@@ -9,6 +9,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.android.purebilibili.core.network.NetworkModule
 import com.android.purebilibili.core.store.TokenManager
+import com.android.purebilibili.data.model.response.CaptchaData
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.qrcode.QRCodeWriter
 import kotlinx.coroutines.Dispatchers
@@ -21,9 +22,15 @@ import kotlinx.coroutines.withContext
 sealed class LoginState {
     object Loading : LoginState()
     data class QrCode(val bitmap: Bitmap) : LoginState()
-    data class Scanned(val bitmap: Bitmap) : LoginState() // 🔥 新增: 已扫描待确认状态
+    data class Scanned(val bitmap: Bitmap) : LoginState()
     object Success : LoginState()
     data class Error(val msg: String) : LoginState()
+    
+    // 🔥 手机号登录状态
+    object PhoneIdle : LoginState()  // 等待输入手机号
+    data class CaptchaReady(val captchaData: CaptchaData) : LoginState()  // 验证码准备就绪
+    data class SmsSent(val captchaKey: String) : LoginState()  // 短信已发送
+    object PasswordMode : LoginState()  // 密码登录模式
 }
 
 class LoginViewModel(application: Application) : AndroidViewModel(application) {
@@ -170,5 +177,218 @@ class LoginViewModel(application: Application) : AndroidViewModel(application) {
             }
         }
         return bmp
+    }
+    
+    // ========== 🔥 手机号登录方法 ==========
+    
+    // 当前验证码数据 (极验验证成功后暂存)
+    private var currentCaptchaData: CaptchaData? = null
+    private var currentValidate: String = ""
+    private var currentSeccode: String = ""
+    private var currentChallenge: String = ""
+    private var currentCaptchaKey: String = ""  // 发送短信后返回的 key
+    private var currentPhone: Long = 0
+    
+    /**
+     * 获取极验验证参数
+     */
+    fun getCaptcha() {
+        viewModelScope.launch {
+            try {
+                _state.value = LoginState.Loading
+                Log.d("LoginDebug", "获取极验验证参数...")
+                
+                val response = NetworkModule.passportApi.getCaptcha()
+                if (response.code == 0 && response.data != null) {
+                    currentCaptchaData = response.data
+                    Log.d("LoginDebug", "极验参数获取成功: gt=${response.data.geetest?.gt}")
+                    _state.value = LoginState.CaptchaReady(response.data)
+                } else {
+                    _state.value = LoginState.Error("获取验证参数失败: ${response.message}")
+                }
+            } catch (e: Exception) {
+                Log.e("LoginDebug", "获取验证参数异常", e)
+                _state.value = LoginState.Error("网络错误: ${e.message}")
+            }
+        }
+    }
+    
+    /**
+     * 保存极验验证结果
+     */
+    fun saveCaptchaResult(validate: String, seccode: String, challenge: String) {
+        currentValidate = validate
+        currentSeccode = seccode
+        currentChallenge = challenge
+        Log.d("LoginDebug", "极验验证成功: validate=$validate")
+    }
+    
+    /**
+     * 发送短信验证码
+     */
+    fun sendSmsCode(phone: Long) {
+        viewModelScope.launch {
+            try {
+                _state.value = LoginState.Loading
+                currentPhone = phone
+                
+                val captchaData = currentCaptchaData ?: run {
+                    _state.value = LoginState.Error("验证参数丢失，请重试")
+                    return@launch
+                }
+                
+                Log.d("LoginDebug", "发送短信验证码到: $phone")
+                
+                val response = NetworkModule.passportApi.sendSmsCode(
+                    tel = phone,
+                    token = captchaData.token,
+                    challenge = currentChallenge,
+                    validate = currentValidate,
+                    seccode = currentSeccode
+                )
+                
+                if (response.code == 0 && response.data != null) {
+                    currentCaptchaKey = response.data.captchaKey
+                    Log.d("LoginDebug", "短信发送成功: captchaKey=${currentCaptchaKey}")
+                    _state.value = LoginState.SmsSent(currentCaptchaKey)
+                } else {
+                    _state.value = LoginState.Error("短信发送失败: ${response.message}")
+                }
+            } catch (e: Exception) {
+                Log.e("LoginDebug", "发送短信异常", e)
+                _state.value = LoginState.Error("网络错误: ${e.message}")
+            }
+        }
+    }
+    
+    /**
+     * 短信验证码登录
+     */
+    fun loginBySms(code: Int) {
+        viewModelScope.launch {
+            try {
+                _state.value = LoginState.Loading
+                Log.d("LoginDebug", "短信验证码登录: phone=$currentPhone, code=$code")
+                
+                val response = NetworkModule.passportApi.loginBySms(
+                    tel = currentPhone,
+                    code = code,
+                    captchaKey = currentCaptchaKey
+                )
+                
+                val body = response.body()
+                if (body?.code == 0) {
+                    // 解析 Cookie
+                    val cookies = response.headers().values("Set-Cookie")
+                    handleLoginCookies(cookies)
+                } else {
+                    _state.value = LoginState.Error("登录失败: ${body?.message ?: "未知错误"}")
+                }
+            } catch (e: Exception) {
+                Log.e("LoginDebug", "短信登录异常", e)
+                _state.value = LoginState.Error("网络错误: ${e.message}")
+            }
+        }
+    }
+    
+    /**
+     * 密码登录
+     */
+    fun loginByPassword(phone: Long, password: String) {
+        viewModelScope.launch {
+            try {
+                _state.value = LoginState.Loading
+                Log.d("LoginDebug", "密码登录: phone=$phone")
+                
+                // 1. 获取 RSA 公钥
+                val keyResponse = NetworkModule.passportApi.getWebKey()
+                if (keyResponse.code != 0 || keyResponse.data == null) {
+                    _state.value = LoginState.Error("获取密钥失败: ${keyResponse.message}")
+                    return@launch
+                }
+                
+                val hash = keyResponse.data.hash
+                val key = keyResponse.data.key
+                
+                // 2. RSA 加密密码
+                val encryptedPassword = RsaEncryption.encryptPassword(password, key, hash)
+                if (encryptedPassword == null) {
+                    _state.value = LoginState.Error("密码加密失败")
+                    return@launch
+                }
+                
+                // 3. 需要验证码
+                val captchaData = currentCaptchaData ?: run {
+                    _state.value = LoginState.Error("验证参数丢失，请重试")
+                    return@launch
+                }
+                
+                // 4. 登录
+                val response = NetworkModule.passportApi.loginByPassword(
+                    username = phone,
+                    password = encryptedPassword,
+                    token = captchaData.token,
+                    challenge = currentChallenge,
+                    validate = currentValidate,
+                    seccode = currentSeccode
+                )
+                
+                val body = response.body()
+                if (body?.code == 0) {
+                    val cookies = response.headers().values("Set-Cookie")
+                    handleLoginCookies(cookies)
+                } else {
+                    _state.value = LoginState.Error("登录失败: ${body?.message ?: "未知错误"}")
+                }
+            } catch (e: Exception) {
+                Log.e("LoginDebug", "密码登录异常", e)
+                _state.value = LoginState.Error("网络错误: ${e.message}")
+            }
+        }
+    }
+    
+    /**
+     * 处理登录返回的 Cookie
+     */
+    private suspend fun handleLoginCookies(cookies: List<String>) {
+        var sessData = ""
+        var biliJct = ""
+        
+        for (line in cookies) {
+            if (line.contains("SESSDATA")) {
+                sessData = line.split(";").firstOrNull { it.trim().startsWith("SESSDATA=") }
+                    ?.substringAfter("SESSDATA=") ?: ""
+            }
+            if (line.contains("bili_jct")) {
+                biliJct = line.split(";").firstOrNull { it.trim().startsWith("bili_jct=") }
+                    ?.substringAfter("bili_jct=") ?: ""
+            }
+        }
+        
+        if (sessData.isNotEmpty()) {
+            Log.d("LoginDebug", "✅ 登录成功: SESSDATA=$sessData")
+            TokenManager.saveCookies(getApplication(), sessData)
+            if (biliJct.isNotEmpty()) {
+                TokenManager.saveCsrf(getApplication(), biliJct)
+            }
+            withContext(Dispatchers.Main) {
+                _state.value = LoginState.Success
+            }
+        } else {
+            _state.value = LoginState.Error("Cookie 解析失败")
+        }
+    }
+    
+    /**
+     * 重置手机登录状态
+     */
+    fun resetPhoneLogin() {
+        currentCaptchaData = null
+        currentValidate = ""
+        currentSeccode = ""
+        currentChallenge = ""
+        currentCaptchaKey = ""
+        currentPhone = 0
+        _state.value = LoginState.PhoneIdle
     }
 }

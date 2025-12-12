@@ -19,6 +19,11 @@ object WbiUtils {
         return sb.toString().substring(0, 32)
     }
 
+    // 🔥 过滤非法字符 (Bilibili 要求)
+    private fun filterIllegalChars(value: String): String {
+        return value.replace(Regex("[!'()*]"), "")
+    }
+
     // 标准化 URL 编码 (仅用于计算签名，不改变原始参数)
     private fun encodeURIComponent(value: String): String {
         return URLEncoder.encode(value, "UTF-8")
@@ -35,14 +40,26 @@ object WbiUtils {
     /**
      * 核心修改：返回的 Map 中，Value 保持原始状态（未编码），让 Retrofit 去编码。
      * 签名计算时使用编码后的值。
+     * 
+     * 🔥 2024 更新：添加 dm_img 系列参数以通过 Bilibili 风控
      */
     fun sign(params: Map<String, String>, imgKey: String, subKey: String): Map<String, String> {
         val mixinKey = getMixinKey(imgKey + subKey)
         val currTime = System.currentTimeMillis() / 1000
 
-        // 1. 准备原始参数 (加入 wts)
-        val rawParams = params.toMutableMap()
+        // 1. 准备原始参数 (加入 wts)，并过滤非法字符
+        val rawParams = mutableMapOf<String, String>()
+        for ((key, value) in params) {
+            rawParams[key] = filterIllegalChars(value)
+        }
         rawParams["wts"] = currTime.toString()
+        
+        // 🔥🔥 [关键] 添加 dm_img 系列参数以通过风控
+        // 这些是 Bilibili 2024 年新增的风控参数，代表设备指纹信息
+        rawParams["dm_img_list"] = "[]"
+        rawParams["dm_img_str"] = "V2ViR0wgMS4wIChPcGVuR0wgRVMgMi4wIENocm9taXVtKQ"  // Base64 of "WebGL 1.0 (OpenGL ES 2.0 Chromium)"
+        rawParams["dm_cover_img_str"] = "QU5HTEUgKE5WSURJQSwgTlZJRElBIEdlRm9yY2UgR1RYIDEwNjAgNkdCIERpcmVjdDNEMTEgdnNfNV8wIHBzXzVfMCwgRDNEMTEp"  // Base64 of GPU info
+        rawParams["dm_img_inter"] = """{"ds":[],"wh":[0,0,0],"of":[0,0,0]}"""
 
         // 2. 排序 Key
         val sortedKeys = rawParams.keys.sorted()
@@ -65,6 +82,8 @@ object WbiUtils {
         // 4. 计算签名
         val strToHash = queryBuilder.toString() + mixinKey
         val wRid = md5(strToHash)
+        
+        android.util.Log.d("WbiUtils", "🔐 w_rid: $wRid, params count: ${rawParams.size}")
 
         // 5. 将签名加入原始参数表
         rawParams["w_rid"] = wRid

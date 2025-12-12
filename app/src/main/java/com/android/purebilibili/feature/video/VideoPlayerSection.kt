@@ -6,7 +6,6 @@ import android.content.Context
 import android.content.ContextWrapper
 import android.media.AudioManager
 import android.provider.Settings
-import android.view.ViewGroup
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -51,7 +50,7 @@ fun VideoPlayerSection(
     val audioManager = remember { context.getSystemService(Context.AUDIO_SERVICE) as AudioManager }
     val maxVolume = remember { audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC) }
 
-    // --- 新增：读取设置中的“详细统计信息”开关 ---
+    // --- 新增：读取设置中的"详细统计信息"开关 ---
     val prefs = remember { context.getSharedPreferences("app_prefs", Context.MODE_PRIVATE) }
     // 使用 rememberUpdatedState 确保重组时获取最新值（虽然在单一 Activity 生命周期内可能需要重启生效，但简单场景够用）
     val showStats by remember { mutableStateOf(prefs.getBoolean("show_stats", false)) }
@@ -217,45 +216,72 @@ fun VideoPlayerSection(
                 }
             }
     ) {
-        // 🔥🔥 关键修复：使用单个 FrameLayout 包含 PlayerView 和 DanmakuView
-        // 绕过 Compose 的 AndroidView 对 DanmakuView 的兼容性问题
+        // 🔥🔥 弹幕管理器
+        val scope = rememberCoroutineScope()
+        val danmakuManager = remember(context, scope) { DanmakuManager(context, scope) }
+        
+        // 🔥 弹幕开关设置
+        val danmakuEnabled by com.android.purebilibili.core.store.SettingsManager
+            .getDanmakuEnabled(context)
+            .collectAsState(initial = true)
+        
+        // 🔥 当视频加载成功时加载弹幕
+        LaunchedEffect(uiState) {
+            if (uiState is PlayerUiState.Success) {
+                val cid = uiState.info.cid
+                if (cid > 0) {
+                    danmakuManager.isEnabled = danmakuEnabled
+                    danmakuManager.loadDanmaku(cid)
+                }
+            }
+        }
+        
+        // 🔥 弹幕开关变化时更新
+        LaunchedEffect(danmakuEnabled) {
+            danmakuManager.isEnabled = danmakuEnabled
+        }
+        
+        // 🔥 绑定 Player
+        DisposableEffect(playerState.player) {
+            danmakuManager.attachPlayer(playerState.player)
+            onDispose {
+                danmakuManager.release()
+            }
+        }
+        
+        // 1. PlayerView (底层)
         AndroidView(
             factory = { ctx ->
-                android.widget.FrameLayout(ctx).apply {
-                    // 1. 添加 PlayerView
-                    val playerView = PlayerView(ctx).apply {
-                        player = playerState.player
-                        setShowBuffering(PlayerView.SHOW_BUFFERING_ALWAYS)
-                        useController = false
-                    }
-                    addView(playerView, android.widget.FrameLayout.LayoutParams(
-                        android.widget.FrameLayout.LayoutParams.MATCH_PARENT,
-                        android.widget.FrameLayout.LayoutParams.MATCH_PARENT
-                    ))
-                    
-                    // 2. 添加 DanmakuView（如果不在 PiP 模式）
-                    if (!isInPipMode) {
-                        val dv = playerState.danmakuView
-                        (dv.parent as? ViewGroup)?.removeView(dv)
-                        dv.visibility = android.view.View.VISIBLE
-                        dv.setBackgroundColor(android.graphics.Color.TRANSPARENT)
-                        addView(dv, android.widget.FrameLayout.LayoutParams(
-                            android.widget.FrameLayout.LayoutParams.MATCH_PARENT,
-                            android.widget.FrameLayout.LayoutParams.MATCH_PARENT
-                        ))
-                        android.util.Log.d("DanmakuView", "🔥 Added DanmakuView to FrameLayout: ${dv.hashCode()}")
-                    }
+                PlayerView(ctx).apply {
+                    player = playerState.player
+                    setShowBuffering(PlayerView.SHOW_BUFFERING_ALWAYS)
+                    useController = false
+                    keepScreenOn = true
                 }
             },
-            update = { frameLayout ->
-                // 确保 DanmakuView 在最上层
-                val dv = playerState.danmakuView
-                if (dv.parent == frameLayout && !isInPipMode) {
-                    dv.bringToFront()
-                }
+            update = { playerView ->
+                playerView.player = playerState.player
             },
             modifier = Modifier.fillMaxSize()
         )
+        
+        // 2. DanmakuView (覆盖在 PlayerView 上方)
+        if (!isInPipMode) {
+            AndroidView(
+                factory = { ctx ->
+                    master.flame.danmaku.ui.widget.DanmakuView(ctx).apply {
+                        // 🔥🔥 [调试] 设置透明背景
+                        setBackgroundColor(android.graphics.Color.TRANSPARENT)
+                        danmakuManager.attachView(this)
+                        android.util.Log.d("DanmakuManager", "🎨 DanmakuView created in factory")
+                    }
+                },
+                modifier = Modifier
+                    .fillMaxSize()
+                    // 🔥🔥 [调试] 添加红色边框验证视图位置
+                    // .border(2.dp, Color.Red)
+            )
+        }
 
         if (isGestureVisible && !isInPipMode) {
             Box(
@@ -314,15 +340,13 @@ fun VideoPlayerSection(
                 isVisible = showControls,
                 onToggleVisible = { showControls = !showControls },
                 isFullscreen = isFullscreen,
-                isDanmakuOn = playerState.isDanmakuOn,
                 currentQualityLabel = uiState.qualityLabels.getOrNull(uiState.qualityIds.indexOf(uiState.currentQuality)) ?: "自动",
                 qualityLabels = uiState.qualityLabels,
-                qualityIds = uiState.qualityIds, // 🔥 传入清晰度ID列表
+                qualityIds = uiState.qualityIds,
                 onQualitySelected = { index ->
                     val id = uiState.qualityIds.getOrNull(index) ?: 0
                     onQualityChange(id, playerState.player.currentPosition)
                 },
-                onToggleDanmaku = { playerState.isDanmakuOn = !playerState.isDanmakuOn },
                 onBack = onBack,
                 onToggleFullscreen = onToggleFullscreen,
 
@@ -332,7 +356,18 @@ fun VideoPlayerSection(
                 // 🔥🔥 [新增] 传入清晰度切换状态和会员状态
                 isQualitySwitching = uiState.isQualitySwitching,
                 isLoggedIn = uiState.isLoggedIn,
-                isVip = uiState.isVip
+                isVip = uiState.isVip,
+                // 🔥🔥 [新增] 弹幕开关和设置
+                danmakuEnabled = danmakuEnabled,
+                onDanmakuToggle = {
+                    danmakuManager.isEnabled = !danmakuManager.isEnabled
+                },
+                danmakuOpacity = danmakuManager.opacity,
+                danmakuFontScale = danmakuManager.fontScale,
+                danmakuSpeed = danmakuManager.speedFactor,
+                onDanmakuOpacityChange = { danmakuManager.opacity = it },
+                onDanmakuFontScaleChange = { danmakuManager.fontScale = it },
+                onDanmakuSpeedChange = { danmakuManager.speedFactor = it }
             )
         }
     }

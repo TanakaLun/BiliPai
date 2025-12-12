@@ -3,8 +3,11 @@ package com.android.purebilibili.feature.video
 
 import androidx.compose.animation.*
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
@@ -41,24 +44,31 @@ fun VideoPlayerOverlay(
     isVisible: Boolean,
     onToggleVisible: () -> Unit,
     isFullscreen: Boolean,
-    isDanmakuOn: Boolean,
     currentQualityLabel: String,
     qualityLabels: List<String>,
-    qualityIds: List<Int> = emptyList(), // 🔥 新增: 清晰度ID列表
-    isLoggedIn: Boolean = false, // 🔥 新增: 登录状态
+    qualityIds: List<Int> = emptyList(),
+    isLoggedIn: Boolean = false,
     onQualitySelected: (Int) -> Unit,
-    onToggleDanmaku: () -> Unit,
     onBack: () -> Unit,
     onToggleFullscreen: () -> Unit,
-    // 🔥🔥 [新增参数] 是否显示统计信息，以及分辨率字符串
     showStats: Boolean = false,
     realResolution: String = "",
-    // 🔥🔥 [新增参数] 清晰度切换中状态
     isQualitySwitching: Boolean = false,
-    // 🔥 [新增] 大会员状态
-    isVip: Boolean = false
+    isVip: Boolean = false,
+    // 🔥🔥 [新增] 弹幕开关和设置
+    danmakuEnabled: Boolean = true,
+    onDanmakuToggle: () -> Unit = {},
+    danmakuOpacity: Float = 0.85f,
+    danmakuFontScale: Float = 1.2f,
+    danmakuSpeed: Float = 1.2f,
+    onDanmakuOpacityChange: (Float) -> Unit = {},
+    onDanmakuFontScaleChange: (Float) -> Unit = {},
+    onDanmakuSpeedChange: (Float) -> Unit = {}
 ) {
     var showQualityMenu by remember { mutableStateOf(false) }
+    var showSpeedMenu by remember { mutableStateOf(false) }
+    var showDanmakuSettings by remember { mutableStateOf(false) }
+    var currentSpeed by remember { mutableFloatStateOf(1.0f) }
     var isPlaying by remember { mutableStateOf(player.isPlaying) }
 
     val progressState by produceState(initialValue = PlayerProgress(), key1 = player) {
@@ -143,11 +153,13 @@ fun VideoPlayerOverlay(
                 TopControlBar(
                     title = title,
                     isFullscreen = isFullscreen,
-                    isDanmakuOn = isDanmakuOn,
                     currentQualityLabel = currentQualityLabel,
                     onBack = onBack,
-                    onToggleDanmaku = onToggleDanmaku,
-                    onQualityClick = { showQualityMenu = true }
+                    onQualityClick = { showQualityMenu = true },
+                    // 🔥🔥 弹幕开关和设置
+                    danmakuEnabled = danmakuEnabled,
+                    onDanmakuToggle = onDanmakuToggle,
+                    onDanmakuSettingsClick = { showDanmakuSettings = true }
                 )
 
                 Spacer(modifier = Modifier.weight(1f))
@@ -156,11 +168,13 @@ fun VideoPlayerOverlay(
                     isPlaying = isPlaying,
                     progress = progressState,
                     isFullscreen = isFullscreen,
+                    currentSpeed = currentSpeed,
                     onPlayPauseClick = {
                         if (isPlaying) player.pause() else player.play()
                         isPlaying = !isPlaying
                     },
                     onSeek = { position -> player.seekTo(position) },
+                    onSpeedClick = { showSpeedMenu = true },
                     onToggleFullscreen = onToggleFullscreen
                 )
             }
@@ -171,7 +185,7 @@ fun VideoPlayerOverlay(
             Box(
                 modifier = Modifier
                     .align(Alignment.TopEnd)
-                    .padding(top = 80.dp, end = 24.dp) // 放在右上角，避开 TopBar
+                    .padding(top = 80.dp, end = 24.dp)
                     .background(Color.Black.copy(0.6f), RoundedCornerShape(4.dp))
                     .padding(horizontal = 8.dp, vertical = 4.dp)
             ) {
@@ -248,7 +262,7 @@ fun VideoPlayerOverlay(
                 qualityIds = qualityIds,
                 currentQuality = currentQualityLabel,
                 isLoggedIn = isLoggedIn,
-                isVip = isVip,  // 🔥 传入大会员状态
+                isVip = isVip,
                 onQualitySelected = { index ->
                     onQualitySelected(index)
                     showQualityMenu = false
@@ -256,20 +270,47 @@ fun VideoPlayerOverlay(
                 onDismiss = { showQualityMenu = false }
             )
         }
+        
+        // --- 7. 🔥🔥 [新增] 倍速选择菜单 ---
+        if (showSpeedMenu) {
+            SpeedSelectionMenu(
+                currentSpeed = currentSpeed,
+                onSpeedSelected = { speed ->
+                    currentSpeed = speed
+                    player.setPlaybackSpeed(speed)
+                    showSpeedMenu = false
+                },
+                onDismiss = { showSpeedMenu = false }
+            )
+        }
+        
+        // --- 8. 🔥🔥 [新增] 弹幕设置面板 ---
+        if (showDanmakuSettings) {
+            DanmakuSettingsPanel(
+                opacity = danmakuOpacity,
+                fontScale = danmakuFontScale,
+                speed = danmakuSpeed,
+                onOpacityChange = onDanmakuOpacityChange,
+                onFontScaleChange = onDanmakuFontScaleChange,
+                onSpeedChange = onDanmakuSpeedChange,
+                onDismiss = { showDanmakuSettings = false }
+            )
+        }
     }
 }
 
-// ... TopControlBar, BottomControlBar, QualitySelectionMenu 等子组件保持不变 ...
-// (你可以直接保留原来文件中的这些子组件代码)
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun TopControlBar(
     title: String,
     isFullscreen: Boolean,
-    isDanmakuOn: Boolean,
     currentQualityLabel: String,
     onBack: () -> Unit,
-    onToggleDanmaku: () -> Unit,
-    onQualityClick: () -> Unit
+    onQualityClick: () -> Unit,
+    // 🔥🔥 [新增] 弹幕开关和设置
+    danmakuEnabled: Boolean = true,
+    onDanmakuToggle: () -> Unit = {},
+    onDanmakuSettingsClick: () -> Unit = {}
 ) {
     Row(
         modifier = Modifier
@@ -290,12 +331,30 @@ fun TopControlBar(
             maxLines = 1,
             modifier = Modifier.weight(1f)
         )
-        IconButton(onClick = onToggleDanmaku) {
-            Icon(
-                if (isDanmakuOn) Icons.Default.Subtitles else Icons.Default.SubtitlesOff,
-                contentDescription = null,
-                tint = if (isDanmakuOn) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.8f)
-            )
+        // 🔥🔥 弹幕开关按钮 - 增强颜色对比度
+        Spacer(modifier = Modifier.width(8.dp))
+        Surface(
+            modifier = Modifier.combinedClickable(
+                onClick = onDanmakuToggle,
+                onLongClick = onDanmakuSettingsClick
+            ),
+            color = if (danmakuEnabled) Color(0xFFFB7299) else Color(0xFF444444),
+            shape = RoundedCornerShape(16.dp),
+            border = if (!danmakuEnabled) BorderStroke(1.5.dp, Color(0xFF666666)) else null
+        ) {
+            Row(
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center
+            ) {
+                Text(
+                    text = "弹",
+                    color = if (danmakuEnabled) Color.White else Color.White.copy(alpha = 0.4f),
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold,
+                    textDecoration = if (!danmakuEnabled) androidx.compose.ui.text.style.TextDecoration.LineThrough else null
+                )
+            }
         }
         Spacer(modifier = Modifier.width(8.dp))
         Surface(
@@ -319,8 +378,10 @@ fun BottomControlBar(
     isPlaying: Boolean,
     progress: PlayerProgress,
     isFullscreen: Boolean,
+    currentSpeed: Float = 1.0f,
     onPlayPauseClick: () -> Unit,
     onSeek: (Long) -> Unit,
+    onSpeedClick: () -> Unit = {},
     onToggleFullscreen: () -> Unit
 ) {
     Column(
@@ -365,6 +426,23 @@ fun BottomControlBar(
             )
 
             Spacer(modifier = Modifier.weight(1f))
+            
+            // 🔥🔥 [新增] 倍速按钮
+            Surface(
+                onClick = onSpeedClick,
+                color = Color.White.copy(alpha = 0.2f),
+                shape = RoundedCornerShape(4.dp)
+            ) {
+                Text(
+                    text = if (currentSpeed == 1.0f) "倍速" else "${currentSpeed}x",
+                    color = Color.White,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                )
+            }
+            
+            Spacer(modifier = Modifier.width(4.dp))
 
             IconButton(
                 onClick = onToggleFullscreen,
@@ -422,19 +500,18 @@ fun VideoProgressBar(
 @Composable
 fun QualitySelectionMenu(
     qualities: List<String>,
-    qualityIds: List<Int> = emptyList(), // 🔥 新增: 清晰度ID列表用于判断VIP要求
+    qualityIds: List<Int> = emptyList(),
     currentQuality: String,
-    isLoggedIn: Boolean = false, // 🔥 是否已登录
-    isVip: Boolean = false,      // 🔥 新增: 是否大会员
+    isLoggedIn: Boolean = false,
+    isVip: Boolean = false,
     onQualitySelected: (Int) -> Unit,
     onDismiss: () -> Unit
 ) {
-    // 🔥 判断清晰度是否需要特殊权限
     fun getQualityTag(qualityId: Int): String? {
         return when (qualityId) {
-            127, 126, 125, 120 -> if (!isVip) "大会员" else null // 8K, 杜比, HDR, 4K - 需要大会员
-            116, 112 -> if (!isVip) "大会员" else null           // 1080P60, 1080P+ - 需要大会员
-            80 -> if (!isLoggedIn) "登录" else null // 1080P 需要登录
+            127, 126, 125, 120 -> if (!isVip) "大会员" else null
+            116, 112 -> if (!isVip) "大会员" else null
+            80 -> if (!isLoggedIn) "登录" else null
             else -> null
         }
     }
@@ -487,7 +564,6 @@ fun QualitySelectionMenu(
                             fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
                         )
                         
-                        // 🔥 显示权限标签
                         if (tag != null) {
                             Spacer(modifier = Modifier.width(8.dp))
                             Surface(
@@ -513,5 +589,206 @@ fun QualitySelectionMenu(
                 }
             }
         }
+    }
+}
+
+// 🔥🔥 [新增] 倍速选择菜单
+@Composable
+fun SpeedSelectionMenu(
+    currentSpeed: Float,
+    onSpeedSelected: (Float) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val speedOptions = listOf(0.5f, 0.75f, 1.0f, 1.25f, 1.5f, 1.75f, 2.0f)
+    
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black.copy(alpha = 0.5f))
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null
+            ) { onDismiss() },
+        contentAlignment = Alignment.Center
+    ) {
+        Surface(
+            modifier = Modifier
+                .widthIn(min = 180.dp, max = 240.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .clickable(enabled = false) {},
+            color = Color(0xFF2B2B2B),
+            shape = RoundedCornerShape(12.dp),
+            tonalElevation = 8.dp
+        ) {
+            Column(modifier = Modifier.padding(vertical = 8.dp)) {
+                Text(
+                    text = "播放速度",
+                    color = Color.White,
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)
+                )
+                HorizontalDivider(color = Color.White.copy(0.1f))
+                speedOptions.forEach { speed ->
+                    val isSelected = speed == currentSpeed
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onSpeedSelected(speed) }
+                            .background(if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.15f) else Color.Transparent)
+                            .padding(horizontal = 16.dp, vertical = 14.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = if (speed == 1.0f) "正常" else "${speed}x",
+                            color = if (isSelected) MaterialTheme.colorScheme.primary else Color.White.copy(0.9f),
+                            fontSize = 14.sp,
+                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                        )
+                        Spacer(modifier = Modifier.weight(1f))
+                        if (isSelected) {
+                            Icon(Icons.Default.Check, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * 🔥🔥 弹幕设置面板
+ */
+@Composable
+fun DanmakuSettingsPanel(
+    opacity: Float,
+    fontScale: Float,
+    speed: Float,
+    onOpacityChange: (Float) -> Unit,
+    onFontScaleChange: (Float) -> Unit,
+    onSpeedChange: (Float) -> Unit,
+    onDismiss: () -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black.copy(alpha = 0.5f))
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null
+            ) { onDismiss() },
+        contentAlignment = Alignment.Center
+    ) {
+        Surface(
+            modifier = Modifier
+                .widthIn(min = 280.dp, max = 360.dp)
+                .clip(RoundedCornerShape(16.dp))
+                .clickable(enabled = false) {},
+            color = Color(0xFF2B2B2B),
+            shape = RoundedCornerShape(16.dp),
+            tonalElevation = 8.dp
+        ) {
+            Column(modifier = Modifier.padding(20.dp)) {
+                // 标题
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "弹幕设置",
+                        color = Color.White,
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    IconButton(onClick = onDismiss, modifier = Modifier.size(28.dp)) {
+                        Icon(
+                            Icons.Default.Close,
+                            contentDescription = "关闭",
+                            tint = Color.White.copy(0.7f),
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                }
+                
+                Spacer(modifier = Modifier.height(20.dp))
+                
+                // 透明度滑块
+                DanmakuSliderItem(
+                    label = "透明度",
+                    value = opacity,
+                    valueRange = 0.3f..1f,
+                    displayText = "${(opacity * 100).toInt()}%",
+                    onValueChange = onOpacityChange
+                )
+                
+                Spacer(modifier = Modifier.height(16.dp))
+                
+                // 字体大小滑块
+                DanmakuSliderItem(
+                    label = "字体大小",
+                    value = fontScale,
+                    valueRange = 0.5f..2f,
+                    displayText = "${(fontScale * 100).toInt()}%",
+                    onValueChange = onFontScaleChange
+                )
+                
+                Spacer(modifier = Modifier.height(16.dp))
+                
+                // 速度滑块
+                DanmakuSliderItem(
+                    label = "弹幕速度",
+                    value = speed,
+                    valueRange = 0.5f..2f,
+                    displayText = when {
+                        speed <= 0.7f -> "慢"
+                        speed >= 1.5f -> "快"
+                        else -> "中"
+                    },
+                    onValueChange = onSpeedChange
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun DanmakuSliderItem(
+    label: String,
+    value: Float,
+    valueRange: ClosedFloatingPointRange<Float>,
+    displayText: String,
+    onValueChange: (Float) -> Unit
+) {
+    Column {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = label,
+                color = Color.White.copy(0.9f),
+                fontSize = 14.sp
+            )
+            Text(
+                text = displayText,
+                color = Color(0xFFFB7299),
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Medium
+            )
+        }
+        Spacer(modifier = Modifier.height(8.dp))
+        Slider(
+            value = value,
+            onValueChange = onValueChange,
+            valueRange = valueRange,
+            colors = SliderDefaults.colors(
+                thumbColor = Color(0xFFFB7299),
+                activeTrackColor = Color(0xFFFB7299),
+                inactiveTrackColor = Color.White.copy(0.2f)
+            ),
+            modifier = Modifier.fillMaxWidth()
+        )
     }
 }

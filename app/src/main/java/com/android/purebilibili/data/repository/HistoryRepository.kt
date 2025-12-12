@@ -11,7 +11,14 @@ object HistoryRepository {
     suspend fun getHistoryList(ps: Int = 20): Result<List<HistoryData>> {
         return withContext(Dispatchers.IO) {
             try {
+                android.util.Log.d("HistoryRepo", "🔴 Fetching history list...")
                 val response = api.getHistoryList(ps)
+                android.util.Log.d("HistoryRepo", "🔴 Response code=${response.code}, items=${response.data?.list?.size ?: 0}")
+                // 打印前两条记录的标题以便调试
+                response.data?.list?.take(2)?.forEach {
+                    android.util.Log.d("HistoryRepo", "🔴 Item: ${it.title}")
+                }
+                
                 if (response.code == 0) {
                     // ListData 中 list 字段存储历史记录
                     Result.success(response.data?.list ?: emptyList())
@@ -19,6 +26,7 @@ object HistoryRepository {
                     Result.failure(Exception(response.message))
                 }
             } catch (e: Exception) {
+                android.util.Log.e("HistoryRepo", "❌ Error: ${e.message}")
                 Result.failure(e)
             }
         }

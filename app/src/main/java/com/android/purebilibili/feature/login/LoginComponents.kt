@@ -37,6 +37,8 @@ import androidx.compose.ui.viewinterop.AndroidView
 import com.android.purebilibili.core.store.TokenManager
 import com.android.purebilibili.core.theme.BiliPink
 import com.android.purebilibili.core.ui.LoadingAnimation
+import coil.compose.AsyncImage
+import coil.request.ImageRequest
 import kotlinx.coroutines.launch
 
 @Composable
@@ -116,22 +118,22 @@ fun TopBar(onClose: () -> Unit) {
 
 @Composable
 fun BrandingSection() {
+    val context = LocalContext.current
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        // Logo
+        // Logo - 使用 3D 蓝色图标
         Surface(
             shape = RoundedCornerShape(20.dp),
-            color = MaterialTheme.colorScheme.primary,
             shadowElevation = 16.dp,
             modifier = Modifier.size(72.dp)
         ) {
-            Box(contentAlignment = Alignment.Center) {
-                Text(
-                    text = "B",
-                    fontSize = 36.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = Color.White
-                )
-            }
+            AsyncImage(
+                model = ImageRequest.Builder(context)
+                    .data(com.android.purebilibili.R.mipmap.ic_launcher_3d)
+                    .crossfade(true)
+                    .build(),
+                contentDescription = "BiliPai",
+                modifier = Modifier.fillMaxSize()
+            )
         }
 
         Spacer(modifier = Modifier.height(20.dp))
@@ -183,6 +185,7 @@ fun LoginMethodTabs(
                         Icon(
                             imageVector = when (method) {
                                 LoginMethod.QR_CODE -> Icons.Outlined.QrCode2
+                                LoginMethod.PHONE_SMS -> Icons.Outlined.Smartphone
                                 LoginMethod.WEB_LOGIN -> Icons.Outlined.Language
                             },
                             contentDescription = null,
@@ -192,8 +195,9 @@ fun LoginMethodTabs(
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
                             text = when (method) {
-                                LoginMethod.QR_CODE -> "扫码登录"
-                                LoginMethod.WEB_LOGIN -> "网页登录"
+                                LoginMethod.QR_CODE -> "扫码"
+                                LoginMethod.PHONE_SMS -> "手机号"
+                                LoginMethod.WEB_LOGIN -> "网页"
                             },
                             color = if (isSelected) Color.White else Color.White.copy(alpha = 0.6f),
                             fontSize = 14.sp,
@@ -242,6 +246,10 @@ fun QrCodeLoginContent(
                     }
                     is LoginState.Success -> {
                         SuccessIndicator()
+                    }
+                    // 手机号登录状态由其他组件处理
+                    else -> {
+                        LoadingQrCode()
                     }
                 }
             }
@@ -629,6 +637,368 @@ fun WebLoginContent(
                     }
                 }
             }
+        }
+    }
+}
+
+/**
+ * 🔥 手机号登录内容
+ */
+@Composable
+fun PhoneLoginContent(
+    state: LoginState,
+    viewModel: LoginViewModel,
+    onLoginSuccess: () -> Unit
+) {
+    val context = LocalContext.current
+    val activity = context as? android.app.Activity
+    
+    var phoneNumber by remember { mutableStateOf("") }
+    var smsCode by remember { mutableStateOf("") }
+    var isPhoneValid by remember { mutableStateOf(false) }
+    var showCaptcha by remember { mutableStateOf(false) }
+    var captchaManager by remember { mutableStateOf<CaptchaManager?>(null) }
+    
+    // 监听状态变化
+    LaunchedEffect(state) {
+        when (state) {
+            is LoginState.Success -> onLoginSuccess()
+            else -> {}
+        }
+    }
+    
+    // 清理资源
+    DisposableEffect(Unit) {
+        onDispose {
+            captchaManager?.destroy()
+        }
+    }
+    
+    // 验证手机号格式
+    fun validatePhone(phone: String): Boolean {
+        return phone.length == 11 && phone.startsWith("1")
+    }
+    
+    Column(
+        modifier = Modifier.fillMaxSize(),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        // 提示卡片
+        Surface(
+            shape = RoundedCornerShape(12.dp),
+            color = Color.White.copy(alpha = 0.08f),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Row(
+                modifier = Modifier.padding(12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    Icons.Outlined.PhoneAndroid,
+                    contentDescription = null,
+                    tint = BiliPink,
+                    modifier = Modifier.size(20.dp)
+                )
+                Spacer(modifier = Modifier.width(12.dp))
+                Text(
+                    text = "使用手机号验证登录，更便捷",
+                    color = Color.White.copy(alpha = 0.8f),
+                    fontSize = 13.sp
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(32.dp))
+        
+        // 主卡片
+        Surface(
+            shape = RoundedCornerShape(24.dp),
+            color = Color.White,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(
+                modifier = Modifier.padding(24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                when (state) {
+                    is LoginState.Loading -> {
+                        Box(
+                            contentAlignment = Alignment.Center,
+                            modifier = Modifier.height(200.dp)
+                        ) {
+                            CircularProgressIndicator(color = BiliPink)
+                        }
+                    }
+                    
+                    is LoginState.SmsSent -> {
+                        // 短信已发送，输入验证码
+                        SmsCodeInputSection(
+                            smsCode = smsCode,
+                            onSmsCodeChange = { smsCode = it },
+                            onSubmit = {
+                                val code = smsCode.toIntOrNull()
+                                if (code != null) {
+                                    viewModel.loginBySms(code)
+                                }
+                            },
+                            isLoading = false
+                        )
+                    }
+                    
+                    is LoginState.Error -> {
+                        // 🔥 只有手机登录相关的错误才显示错误界面
+                        val isPhoneError = state.msg.contains("手机") || 
+                                          state.msg.contains("短信") || 
+                                          state.msg.contains("验证码") ||
+                                          state.msg.contains("验证")
+                        if (isPhoneError) {
+                            ErrorSection(
+                                message = state.msg,
+                                onRetry = { viewModel.resetPhoneLogin() }
+                            )
+                        } else {
+                            // QR 相关的错误，在手机号登录界面显示输入
+                            PhoneInputSection(
+                                phoneNumber = phoneNumber,
+                                onPhoneChange = {
+                                    phoneNumber = it.filter { c -> c.isDigit() }.take(11)
+                                    isPhoneValid = validatePhone(phoneNumber)
+                                },
+                                isValid = isPhoneValid,
+                                onGetCaptcha = {
+                                    if (isPhoneValid) {
+                                        viewModel.getCaptcha()
+                                    }
+                                },
+                                onStartCaptcha = { captchaData ->
+                                    activity?.let { act ->
+                                        captchaManager = CaptchaManager(act)
+                                        captchaManager?.startCaptcha(
+                                            gt = captchaData.geetest?.gt ?: "",
+                                            challenge = captchaData.geetest?.challenge ?: "",
+                                            onSuccess = { validate, seccode, challenge ->
+                                                viewModel.saveCaptchaResult(validate, seccode, challenge)
+                                                viewModel.sendSmsCode(phoneNumber.toLong())
+                                            },
+                                            onFailed = { error ->
+                                                android.util.Log.e("PhoneLogin", "Captcha failed: $error")
+                                            }
+                                        )
+                                    }
+                                },
+                                captchaReady = false,
+                                captchaData = null
+                            )
+                        }
+                    }
+                    
+                    else -> {
+                        // 输入手机号
+                        PhoneInputSection(
+                            phoneNumber = phoneNumber,
+                            onPhoneChange = {
+                                phoneNumber = it.filter { c -> c.isDigit() }.take(11)
+                                isPhoneValid = validatePhone(phoneNumber)
+                            },
+                            isValid = isPhoneValid,
+                            onGetCaptcha = {
+                                if (isPhoneValid) {
+                                    viewModel.getCaptcha()
+                                }
+                            },
+                            onStartCaptcha = { captchaData ->
+                                activity?.let { act ->
+                                    captchaManager = CaptchaManager(act)
+                                    captchaManager?.startCaptcha(
+                                        gt = captchaData.geetest?.gt ?: "",
+                                        challenge = captchaData.geetest?.challenge ?: "",
+                                        onSuccess = { validate, seccode, challenge ->
+                                            viewModel.saveCaptchaResult(validate, seccode, challenge)
+                                            viewModel.sendSmsCode(phoneNumber.toLong())
+                                        },
+                                        onFailed = { error ->
+                                            android.util.Log.e("PhoneLogin", "Captcha failed: $error")
+                                        }
+                                    )
+                                }
+                            },
+                            captchaReady = state is LoginState.CaptchaReady,
+                            captchaData = (state as? LoginState.CaptchaReady)?.captchaData
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun PhoneInputSection(
+    phoneNumber: String,
+    onPhoneChange: (String) -> Unit,
+    isValid: Boolean,
+    onGetCaptcha: () -> Unit,
+    onStartCaptcha: (com.android.purebilibili.data.model.response.CaptchaData) -> Unit,
+    captchaReady: Boolean,
+    captchaData: com.android.purebilibili.data.model.response.CaptchaData?
+) {
+    // 当验证码准备好时自动触发
+    LaunchedEffect(captchaReady) {
+        if (captchaReady && captchaData != null) {
+            onStartCaptcha(captchaData)
+        }
+    }
+    
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Icon(
+            Icons.Outlined.Smartphone,
+            contentDescription = null,
+            tint = BiliPink,
+            modifier = Modifier.size(48.dp)
+        )
+        
+        Spacer(modifier = Modifier.height(16.dp))
+        
+        Text(
+            text = "手机号登录",
+            fontSize = 20.sp,
+            fontWeight = FontWeight.Bold,
+            color = Color(0xFF333333)
+        )
+        
+        Spacer(modifier = Modifier.height(24.dp))
+        
+        // 手机号输入框
+        OutlinedTextField(
+            value = phoneNumber,
+            onValueChange = onPhoneChange,
+            label = { Text("手机号") },
+            placeholder = { Text("请输入11位手机号") },
+            leadingIcon = {
+                Text("+86", color = Color.Gray, fontSize = 14.sp)
+            },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth(),
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedBorderColor = BiliPink,
+                cursorColor = BiliPink
+            )
+        )
+        
+        Spacer(modifier = Modifier.height(24.dp))
+        
+        // 获取验证码按钮
+        Button(
+            onClick = onGetCaptcha,
+            enabled = isValid,
+            colors = ButtonDefaults.buttonColors(containerColor = BiliPink),
+            shape = RoundedCornerShape(12.dp),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text("获取验证码", color = Color.White)
+        }
+    }
+}
+
+@Composable
+private fun SmsCodeInputSection(
+    smsCode: String,
+    onSmsCodeChange: (String) -> Unit,
+    onSubmit: () -> Unit,
+    isLoading: Boolean
+) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Icon(
+            Icons.Outlined.Sms,
+            contentDescription = null,
+            tint = Color(0xFF4CAF50),
+            modifier = Modifier.size(48.dp)
+        )
+        
+        Spacer(modifier = Modifier.height(16.dp))
+        
+        Text(
+            text = "输入验证码",
+            fontSize = 20.sp,
+            fontWeight = FontWeight.Bold,
+            color = Color(0xFF333333)
+        )
+        
+        Text(
+            text = "验证码已发送到您的手机",
+            fontSize = 14.sp,
+            color = Color.Gray
+        )
+        
+        Spacer(modifier = Modifier.height(24.dp))
+        
+        // 验证码输入框
+        OutlinedTextField(
+            value = smsCode,
+            onValueChange = { onSmsCodeChange(it.filter { c -> c.isDigit() }.take(6)) },
+            label = { Text("验证码") },
+            placeholder = { Text("请输入6位验证码") },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth(),
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedBorderColor = Color(0xFF4CAF50),
+                cursorColor = Color(0xFF4CAF50)
+            )
+        )
+        
+        Spacer(modifier = Modifier.height(24.dp))
+        
+        // 登录按钮
+        Button(
+            onClick = onSubmit,
+            enabled = smsCode.length == 6 && !isLoading,
+            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4CAF50)),
+            shape = RoundedCornerShape(12.dp),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            if (isLoading) {
+                CircularProgressIndicator(
+                    color = Color.White,
+                    strokeWidth = 2.dp,
+                    modifier = Modifier.size(20.dp)
+                )
+            } else {
+                Text("登录", color = Color.White)
+            }
+        }
+    }
+}
+
+@Composable
+private fun ErrorSection(
+    message: String,
+    onRetry: () -> Unit
+) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Icon(
+            Icons.Outlined.ErrorOutline,
+            contentDescription = null,
+            tint = Color(0xFFFF6B6B),
+            modifier = Modifier.size(48.dp)
+        )
+        
+        Spacer(modifier = Modifier.height(16.dp))
+        
+        Text(
+            text = message,
+            fontSize = 14.sp,
+            color = Color.Gray,
+            textAlign = TextAlign.Center
+        )
+        
+        Spacer(modifier = Modifier.height(24.dp))
+        
+        Button(
+            onClick = onRetry,
+            colors = ButtonDefaults.buttonColors(containerColor = BiliPink),
+            shape = RoundedCornerShape(12.dp)
+        ) {
+            Text("重试", color = Color.White)
         }
     }
 }

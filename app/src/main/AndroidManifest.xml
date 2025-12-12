@@ -30,31 +30,17 @@
             android:enabled="true"
             android:theme="@style/Theme.PureBiliBili"
             android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|mnc|colorMode|density">
+            <!-- Launcher category removed, handled by aliases -->
         </activity>
 
-        <!-- 🌟 Default Icon (Alias) -->
+        <!-- Default Alias (3D - 默认) -->
         <activity-alias
-            android:name="com.android.purebilibili.MainActivityDefault"
+            android:name=".MainActivityAlias3D"
             android:enabled="true"
             android:exported="true"
-            android:icon="@mipmap/ic_launcher"
+            android:icon="@mipmap/ic_launcher_3d"
+            android:roundIcon="@mipmap/ic_launcher_3d_round"
             android:label="@string/app_name"
-            android:roundIcon="@mipmap/ic_launcher_round"
-            android:targetActivity="com.android.purebilibili.MainActivity">
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.LAUNCHER" />
-            </intent-filter>
-        </activity-alias>
-
-        <!-- 🌸 Minimalist Icon -->
-        <activity-alias
-            android:name=".MainActivityMinimalist"
-            android:enabled="false"
-            android:exported="true"
-            android:icon="@mipmap/ic_launcher_minimalist"
-            android:label="@string/app_name"
-            android:roundIcon="@mipmap/ic_launcher_minimalist"
             android:targetActivity=".MainActivity">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -62,29 +48,13 @@
             </intent-filter>
         </activity-alias>
 
-        <!-- 🧊 Glass Icon -->
         <activity-alias
-            android:name=".MainActivityGlass"
+            android:name=".MainActivityAliasBlue"
             android:enabled="false"
             android:exported="true"
-            android:icon="@mipmap/ic_launcher_glass"
+            android:icon="@mipmap/ic_launcher_blue"
+            android:roundIcon="@mipmap/ic_launcher_blue_round"
             android:label="@string/app_name"
-            android:roundIcon="@mipmap/ic_launcher_glass"
-            android:targetActivity=".MainActivity">
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.LAUNCHER" />
-            </intent-filter>
-        </activity-alias>
-
-        <!-- 🐱 Mascot Icon -->
-        <activity-alias
-            android:name=".MainActivityMascot"
-            android:enabled="false"
-            android:exported="true"
-            android:icon="@mipmap/ic_launcher_mascot"
-            android:label="@string/app_name"
-            android:roundIcon="@mipmap/ic_launcher_mascot"
             android:targetActivity=".MainActivity">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -93,21 +63,48 @@
         </activity-alias>
 
 
-
-        <!-- 🎨 Abstract Icon -->
         <activity-alias
-            android:name=".MainActivityAbstract"
+            android:name=".MainActivityAliasRetro"
             android:enabled="false"
             android:exported="true"
-            android:icon="@mipmap/ic_launcher_abstract"
+            android:icon="@mipmap/ic_launcher_retro"
+            android:roundIcon="@mipmap/ic_launcher_retro_round"
             android:label="@string/app_name"
-            android:roundIcon="@mipmap/ic_launcher_abstract"
             android:targetActivity=".MainActivity">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity-alias>
+
+        <activity-alias
+            android:name=".MainActivityAliasFlat"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_launcher_flat"
+            android:roundIcon="@mipmap/ic_launcher_flat_round"
+            android:label="@string/app_name"
+            android:targetActivity=".MainActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+
+        <activity-alias
+            android:name=".MainActivityAliasNeon"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_launcher_neon"
+            android:roundIcon="@mipmap/ic_launcher_neon_round"
+            android:label="@string/app_name"
+            android:targetActivity=".MainActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+
 
         <activity
             android:name=".feature.video.VideoActivity"

@@ -5,6 +5,7 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.android.purebilibili.data.model.response.VideoItem
+import com.android.purebilibili.data.model.response.LiveRoom
 import com.android.purebilibili.data.repository.VideoRepository
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -27,11 +28,31 @@ data class UserState(
     val vipLabel: String = ""
 )
 
+// 🔥🔥 [新增] 首页分类枚举
+enum class HomeCategory(val label: String) {
+    RECOMMEND("推荐"),
+    POPULAR("热门"),
+    // 以下待实现
+    LIVE("直播"),
+    ANIME("追番"),
+    MOVIE("影视")
+}
+
+// 🔥🔥 [新增] 直播子分类
+enum class LiveSubCategory(val label: String) {
+    FOLLOWED("关注"),
+    POPULAR("热门")
+}
+
 data class HomeUiState(
     val videos: List<VideoItem> = emptyList(),
+    val liveRooms: List<LiveRoom> = emptyList(),  // 🔥 直播列表
     val isLoading: Boolean = false,
     val error: String? = null,
-    val user: UserState = UserState()
+    val user: UserState = UserState(),
+    val currentCategory: HomeCategory = HomeCategory.RECOMMEND,  // 🔥 当前分类
+    val liveSubCategory: LiveSubCategory = LiveSubCategory.FOLLOWED,  // 🔥 直播子分类
+    val refreshKey: Long = 0L  // 🔥 刷新标识符，用于强制重置动画
 )
 
 class HomeViewModel(application: Application) : AndroidViewModel(application) {
@@ -42,9 +63,56 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     val isRefreshing = _isRefreshing.asStateFlow()
 
     private var refreshIdx = 0
+    private var popularPage = 1  // 🔥 热门视频分页
+    private var livePage = 1     // 🔥 直播分页
+    private var hasMoreLiveData = true  // 🔥 是否还有更多直播数据
 
     init {
         loadData()
+    }
+
+    // 🔥🔥 [新增] 切换分类
+    fun switchCategory(category: HomeCategory) {
+        if (_uiState.value.currentCategory == category) return
+        viewModelScope.launch {
+            // 🔥🔥 [修复] 如果切换到直播分类，未登录用户默认显示热门
+            val liveSubCategory = if (category == HomeCategory.LIVE) {
+                val isLoggedIn = !com.android.purebilibili.core.store.TokenManager.sessDataCache.isNullOrEmpty()
+                if (isLoggedIn) _uiState.value.liveSubCategory else LiveSubCategory.POPULAR
+            } else {
+                _uiState.value.liveSubCategory
+            }
+            
+            _uiState.value = _uiState.value.copy(
+                currentCategory = category,
+                liveSubCategory = liveSubCategory,
+                videos = emptyList(),
+                liveRooms = emptyList(),  // 🔥 清空直播列表
+                isLoading = true,
+                error = null
+            )
+            refreshIdx = 0
+            popularPage = 1
+            livePage = 1
+            hasMoreLiveData = true  // 🔥 重置分页标志
+            fetchData(isLoadMore = false)
+        }
+    }
+    
+    // 🔥🔥 [新增] 切换直播子分类
+    fun switchLiveSubCategory(subCategory: LiveSubCategory) {
+        if (_uiState.value.liveSubCategory == subCategory) return
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(
+                liveSubCategory = subCategory,
+                liveRooms = emptyList(),
+                isLoading = true,
+                error = null
+            )
+            livePage = 1
+            hasMoreLiveData = true  // 🔥 修复：切换分类时重置分页标志
+            fetchLiveRooms(isLoadMore = false)
+        }
     }
 
     private fun loadData() {
@@ -58,81 +126,177 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         if (_isRefreshing.value) return
         viewModelScope.launch {
             _isRefreshing.value = true
-            refreshIdx++
+            refreshIdx = 0
+            popularPage = 1
+            livePage = 1  // 🔥 修复：刷新时也要重置直播分页
+            hasMoreLiveData = true  // 🔥 修复：刷新时重置分页标志
             fetchData(isLoadMore = false)
+            // 🔥 数据加载完成后再更新 refreshKey，避免闪烁
+            _uiState.value = _uiState.value.copy(refreshKey = System.currentTimeMillis())
             _isRefreshing.value = false
         }
     }
 
     fun loadMore() {
         if (_uiState.value.isLoading || _isRefreshing.value) return
+        
+        // 🔥 修复：如果是直播分类且没有更多数据，不再加载
+        if (_uiState.value.currentCategory == HomeCategory.LIVE && !hasMoreLiveData) {
+            android.util.Log.d("HomeVM", "🔴 No more live data, skipping loadMore")
+            return
+        }
+        
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isLoading = true)
+            // 🔥 修复：先增加页码再获取数据（确保请求下一页）
             refreshIdx++
+            popularPage++
+            livePage++
             fetchData(isLoadMore = true)
         }
     }
 
     private suspend fun fetchData(isLoadMore: Boolean) {
-        // 🔥🔥 [核心修复]：每次刷新都重新获取用户信息，确保状态同步
-        // 并行请求视频列表和用户信息
-        val videoResult = VideoRepository.getHomeVideos(refreshIdx)
-        val navResult = VideoRepository.getNavInfo()
-
-        // 更新 UserState
-        var newUserState = _uiState.value.user
-        navResult.onSuccess { navData ->
-            if (navData.isLogin) {
-                // 登录成功
-                val isVip = navData.vip.status == 1
-                // 🔥 缓存 VIP 状态供 PlayerViewModel 使用
-                com.android.purebilibili.core.store.TokenManager.isVipCache = isVip
-                // 🔥 缓存用户 MID 供收藏等功能使用
-                com.android.purebilibili.core.store.TokenManager.midCache = navData.mid
-                newUserState = UserState(
-                    isLogin = true,
-                    face = navData.face,
-                    name = navData.uname,
-                    mid = navData.mid,
-                    level = navData.level_info.current_level,
-                    coin = navData.money,
-                    bcoin = navData.wallet.bcoin_balance,
-                    isVip = isVip
+        val currentCategory = _uiState.value.currentCategory
+        
+        // 🔥 直播分类单独处理
+        if (currentCategory == HomeCategory.LIVE) {
+            fetchLiveRooms(isLoadMore)
+            return
+        }
+        
+        // 🔥 视频类分类处理
+        val videoResult = when (currentCategory) {
+            HomeCategory.RECOMMEND -> VideoRepository.getHomeVideos(refreshIdx)
+            HomeCategory.POPULAR -> VideoRepository.getPopularVideos(popularPage)
+            else -> {
+                // 🔥🔥 [修复] 未实现的分类显示错误，但保留 previousCategory 供返回使用
+                _uiState.value = _uiState.value.copy(
+                    isLoading = false,
+                    error = "该分类暂未实现"
                 )
-            } else {
-                // 🔥🔥 接口明确返回未登录，强制重置为 Guest
-                com.android.purebilibili.core.store.TokenManager.isVipCache = false
-                com.android.purebilibili.core.store.TokenManager.midCache = null
-                newUserState = UserState(isLogin = false)
+                return
             }
-        }.onFailure {
-            // 网络彻底失败，如果是 LoadMore 不用管，如果是刷新且没数据，可以考虑重置
+        }
+        
+        // 仅在首次加载或刷新时获取用户信息
+        if (!isLoadMore) {
+            fetchUserInfo()
         }
 
-        if (isLoadMore) delay(300)
+        if (isLoadMore) delay(100)
 
         videoResult.onSuccess { videos ->
             val validVideos = videos.filter { it.bvid.isNotEmpty() && it.title.isNotEmpty() }
             if (validVideos.isNotEmpty()) {
                 _uiState.value = _uiState.value.copy(
                     videos = if (isLoadMore) _uiState.value.videos + validVideos else validVideos,
+                    liveRooms = emptyList(),  // 清空直播列表
                     isLoading = false,
-                    user = newUserState, // 应用最新的用户状态
                     error = null
                 )
             } else {
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,
-                    user = newUserState,
-                    error = if (!isLoadMore && _uiState.value.videos.isEmpty()) "没有更多推荐了" else null
+                    error = if (!isLoadMore && _uiState.value.videos.isEmpty()) "没有更多内容了" else null
                 )
             }
         }.onFailure { error ->
             _uiState.value = _uiState.value.copy(
                 isLoading = false,
-                error = if (!isLoadMore && _uiState.value.videos.isEmpty()) error.message ?: "网络错误" else null,
-                user = newUserState
+                error = if (!isLoadMore && _uiState.value.videos.isEmpty()) error.message ?: "网络错误" else null
             )
+        }
+    }
+    
+    // 🔥🔥 [新增] 获取直播间列表（支持关注/热门切换）
+    private suspend fun fetchLiveRooms(isLoadMore: Boolean) {
+        val page = if (isLoadMore) livePage else 1
+        val subCategory = _uiState.value.liveSubCategory
+        
+        android.util.Log.d("HomeVM", "🔴 fetchLiveRooms: isLoadMore=$isLoadMore, page=$page, livePage=$livePage, subCategory=$subCategory")
+        
+        // 🔥 根据子分类选择不同的 API
+        val result = when (subCategory) {
+            LiveSubCategory.FOLLOWED -> VideoRepository.getFollowedLive(page)
+            LiveSubCategory.POPULAR -> VideoRepository.getLiveRooms(page)
+        }
+        
+        if (!isLoadMore) fetchUserInfo()
+        if (isLoadMore) delay(100)
+        
+        result.onSuccess { rooms ->
+            android.util.Log.d("HomeVM", "🔴 Fetched ${rooms.size} rooms for page $page")
+            
+            if (rooms.isNotEmpty()) {
+                // 🔥 修复：过滤重复的直播间
+                val existingRoomIds = _uiState.value.liveRooms.map { it.roomid }.toSet()
+                val newRooms = if (isLoadMore) {
+                    rooms.filter { it.roomid !in existingRoomIds }
+                } else {
+                    rooms
+                }
+                
+                android.util.Log.d("HomeVM", "🔴 New unique rooms: ${newRooms.size}")
+                
+                // 🔥 关键修复：如果没有新的唯一房间，标记为无更多数据
+                if (isLoadMore && newRooms.isEmpty()) {
+                    hasMoreLiveData = false
+                    android.util.Log.d("HomeVM", "🔴 No more unique live data, stopping pagination")
+                    _uiState.value = _uiState.value.copy(isLoading = false)
+                    return@onSuccess
+                }
+                
+                _uiState.value = _uiState.value.copy(
+                    liveRooms = if (isLoadMore) _uiState.value.liveRooms + newRooms else rooms,
+                    videos = emptyList(),  // 清空视频列表
+                    isLoading = false,
+                    error = null
+                )
+            } else {
+                // 🔥 没有更多数据时，不再触发加载更多
+                val message = when (subCategory) {
+                    LiveSubCategory.FOLLOWED -> "暂无关注的主播在直播"
+                    LiveSubCategory.POPULAR -> "没有直播"
+                }
+                _uiState.value = _uiState.value.copy(
+                    isLoading = false,
+                    error = if (!isLoadMore && _uiState.value.liveRooms.isEmpty()) message else null
+                )
+            }
+        }.onFailure { e ->
+            _uiState.value = _uiState.value.copy(
+                isLoading = false,
+                error = if (!isLoadMore && _uiState.value.liveRooms.isEmpty()) e.message ?: "网络错误" else null
+            )
+        }
+    }
+    
+    // 🔥 提取用户信息获取逻辑
+    private suspend fun fetchUserInfo() {
+        val navResult = VideoRepository.getNavInfo()
+        navResult.onSuccess { navData ->
+            if (navData.isLogin) {
+                val isVip = navData.vip.status == 1
+                com.android.purebilibili.core.store.TokenManager.isVipCache = isVip
+                com.android.purebilibili.core.store.TokenManager.midCache = navData.mid
+                _uiState.value = _uiState.value.copy(
+                    user = UserState(
+                        isLogin = true,
+                        face = navData.face,
+                        name = navData.uname,
+                        mid = navData.mid,
+                        level = navData.level_info.current_level,
+                        coin = navData.money,
+                        bcoin = navData.wallet.bcoin_balance,
+                        isVip = isVip
+                    )
+                )
+            } else {
+                com.android.purebilibili.core.store.TokenManager.isVipCache = false
+                com.android.purebilibili.core.store.TokenManager.midCache = null
+                _uiState.value = _uiState.value.copy(user = UserState(isLogin = false))
+            }
         }
     }
 }

@@ -2,6 +2,13 @@ package com.android.purebilibili.data.model.response
 
 import kotlinx.serialization.Serializable
 
+// --- 0. 基础响应 (用于只返回 code 的 API) ---
+@Serializable
+data class BaseResponse(
+    val code: Int = 0,
+    val message: String = ""
+)
+
 // --- 1. 导航信息 (基本信息、等级、钱包、VIP、Wbi签名Key) ---
 @Serializable
 data class NavResponse(

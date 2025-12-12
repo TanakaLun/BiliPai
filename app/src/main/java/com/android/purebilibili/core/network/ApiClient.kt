@@ -13,6 +13,7 @@ import okhttp3.ResponseBody
 import retrofit2.Response
 import retrofit2.Retrofit
 import retrofit2.http.GET
+import retrofit2.http.POST
 import retrofit2.http.Query
 import retrofit2.http.QueryMap
 import java.security.SecureRandom
@@ -45,12 +46,80 @@ interface BilibiliApi {
 
     @GET("x/web-interface/wbi/index/top/feed/rcmd")
     suspend fun getRecommendParams(@QueryMap params: Map<String, String>): RecommendResponse
+    
+    // 🔥🔥 [新增] 热门视频 - 无需签名直接调用
+    @GET("x/web-interface/popular")
+    suspend fun getPopularVideos(
+        @Query("pn") pn: Int = 1,
+        @Query("ps") ps: Int = 20
+    ): PopularResponse  // 🔥 使用专用响应类型
+    
+    // 🔥🔥 [新增] 直播列表 - 使用正确的 API 端点
+    @GET("https://api.live.bilibili.com/room/v3/area/getRoomList")
+    suspend fun getLiveList(
+        @Query("parent_area_id") parentAreaId: Int = 0,  // 0=全站
+        @Query("page") page: Int = 1,
+        @Query("page_size") pageSize: Int = 30,
+        @Query("sort_type") sortType: String = "online"  // 按人气排序
+    ): LiveResponse
+    
+    // 🔥🔥 [新增] 获取关注的直播 - 需要登录
+    @GET("https://api.live.bilibili.com/xlive/web-ucenter/user/following")
+    suspend fun getFollowedLive(
+        @Query("page") page: Int = 1,
+        @Query("page_size") pageSize: Int = 30
+    ): FollowedLiveResponse
+    
+    // 🔥🔥 [新增] 获取直播间详情（包含在线人数）
+    @GET("https://api.live.bilibili.com/room/v1/Room/get_info")
+    suspend fun getRoomInfo(
+        @Query("room_id") roomId: Long
+    ): RoomInfoResponse
+    
+    // 🔥🔥 [新增] 获取直播流 URL - 使用更可靠的 xlive API
+    @GET("https://api.live.bilibili.com/xlive/web-room/v2/index/getRoomPlayInfo")
+    suspend fun getLivePlayUrl(
+        @Query("room_id") roomId: Long,
+        @Query("protocol") protocol: String = "0,1",  // 0=http_stream, 1=http_hls
+        @Query("format") format: String = "0,1,2",    // 0=flv, 1=ts, 2=fmp4
+        @Query("codec") codec: String = "0,1",        // 0=avc, 1=hevc
+        @Query("qn") quality: Int = 150,              // 150=高清
+        @Query("platform") platform: String = "web",
+        @Query("ptype") ptype: Int = 8
+    ): LivePlayUrlResponse
 
     @GET("x/web-interface/view")
     suspend fun getVideoInfo(@Query("bvid") bvid: String): VideoDetailResponse
 
     @GET("x/player/wbi/playurl")
     suspend fun getPlayUrl(@QueryMap params: Map<String, String>): PlayUrlResponse
+    
+    // 🔥 HTML5 降级方案 (无 Referer 鉴权，仅 MP4 格式)
+    @GET("x/player/wbi/playurl")
+    suspend fun getPlayUrlHtml5(@QueryMap params: Map<String, String>): PlayUrlResponse
+    
+    // 🔥🔥 [新增] 上报播放心跳（记录播放历史）
+    @POST("x/click-interface/web/heartbeat")
+    suspend fun reportHeartbeat(
+        @Query("bvid") bvid: String,
+        @Query("cid") cid: Long,
+        @Query("played_time") playedTime: Long = 0,  // 播放进度（秒）
+        @Query("real_played_time") realPlayedTime: Long = 0,
+        @Query("start_ts") startTs: Long = System.currentTimeMillis() / 1000
+    ): BaseResponse
+
+    // 🔥🔥 [新增] 无 WBI 签名的旧版 API (可能绕过 412)
+    @GET("x/player/playurl")
+    suspend fun getPlayUrlLegacy(
+        @Query("bvid") bvid: String,
+        @Query("cid") cid: Long,
+        @Query("qn") qn: Int = 80,
+        @Query("fnval") fnval: Int = 16,  // MP4 格式
+        @Query("fnver") fnver: Int = 0,
+        @Query("fourk") fourk: Int = 1,
+        @Query("platform") platform: String = "html5",
+        @Query("high_quality") highQuality: Int = 1
+    ): PlayUrlResponse
 
     @GET("x/web-interface/archive/related")
     suspend fun getRelatedVideos(@Query("bvid") bvid: String): RelatedResponse
@@ -139,9 +208,32 @@ interface BilibiliApi {
     ): HasCoinedResponse
 }
 
+// 🔥 [新增] Buvid SPI 响应模型 (用于获取正确的设备指纹)
+@kotlinx.serialization.Serializable
+data class BuvidSpiData(
+    val b_3: String = "",  // buvid3
+    val b_4: String = ""   // buvid4
+)
 
-// ... (SearchApi, PassportApi, NetworkModule 保持不变，直接保留你现有的即可) ...
-// (为了节省篇幅，NetworkModule 部分代码与上一版相同，不需要变动，只改上面的 Interface 即可)
+@kotlinx.serialization.Serializable
+data class BuvidSpiResponse(
+    val code: Int = 0,
+    val data: BuvidSpiData? = null
+)
+
+// 🔥 [新增] Buvid API
+interface BuvidApi {
+    @GET("x/frontend/finger/spi")
+    suspend fun getSpi(): BuvidSpiResponse
+    
+    // 🔥 Buvid 激活 (PiliPala 中关键的一步)
+    @retrofit2.http.FormUrlEncoded
+    @POST("x/internal/gaia-gateway/ExClimbWuzhi")
+    suspend fun activateBuvid(
+        @retrofit2.http.Field("payload") payload: String
+    ): SimpleApiResponse
+}
+
 interface SearchApi {
     @GET("x/web-interface/search/square")
     suspend fun getHotSearch(@Query("limit") limit: Int = 10): HotSearchResponse
@@ -160,17 +252,90 @@ interface DynamicApi {
     ): DynamicFeedResponse
 }
 
+// 🔥🔥 [新增] UP主空间 API
+interface SpaceApi {
+    // 获取用户详细信息 (需要 WBI 签名)
+    @GET("x/space/wbi/acc/info")
+    suspend fun getSpaceInfo(@QueryMap params: Map<String, String>): com.android.purebilibili.data.model.response.SpaceInfoResponse
+    
+    // 获取用户投稿视频列表 (需要 WBI 签名)
+    @GET("x/space/wbi/arc/search")
+    suspend fun getSpaceVideos(@QueryMap params: Map<String, String>): com.android.purebilibili.data.model.response.SpaceVideoResponse
+    
+    // 获取关注/粉丝数
+    @GET("x/relation/stat")
+    suspend fun getRelationStat(@Query("vmid") mid: Long): com.android.purebilibili.data.model.response.RelationStatResponse
+    
+    // 获取UP主播放量/获赞数
+    @GET("x/space/upstat")
+    suspend fun getUpStat(@Query("mid") mid: Long): com.android.purebilibili.data.model.response.UpStatResponse
+}
+
 interface PassportApi {
+    // 二维码登录
     @GET("x/passport-login/web/qrcode/generate")
     suspend fun generateQrCode(): QrCodeResponse
 
     @GET("x/passport-login/web/qrcode/poll")
     suspend fun pollQrCode(@Query("qrcode_key") key: String): Response<PollResponse>
+    
+    // ========== 🔥 极验验证 + 手机号/密码登录 ==========
+    
+    // 获取极验验证参数 (gt, challenge, token)
+    @GET("x/passport-login/captcha")
+    suspend fun getCaptcha(
+        @Query("source") source: String = "main_web"
+    ): CaptchaResponse
+    
+    // 发送短信验证码
+    @retrofit2.http.FormUrlEncoded
+    @retrofit2.http.POST("x/passport-login/web/sms/send")
+    suspend fun sendSmsCode(
+        @retrofit2.http.Field("cid") cid: Int = 86,           // 国家代码，中国大陆 = 86
+        @retrofit2.http.Field("tel") tel: Long,                // 手机号
+        @retrofit2.http.Field("source") source: String = "main_web",
+        @retrofit2.http.Field("token") token: String,          // captcha token
+        @retrofit2.http.Field("challenge") challenge: String,  // 极验 challenge
+        @retrofit2.http.Field("validate") validate: String,    // 极验验证结果
+        @retrofit2.http.Field("seccode") seccode: String       // 极验安全码
+    ): SmsCodeResponse
+    
+    // 短信验证码登录
+    @retrofit2.http.FormUrlEncoded
+    @retrofit2.http.POST("x/passport-login/web/login/sms")
+    suspend fun loginBySms(
+        @retrofit2.http.Field("cid") cid: Int = 86,
+        @retrofit2.http.Field("tel") tel: Long,
+        @retrofit2.http.Field("code") code: Int,                // 短信验证码
+        @retrofit2.http.Field("source") source: String = "main_mini",
+        @retrofit2.http.Field("captcha_key") captchaKey: String, // sendSmsCode 返回的 key
+        @retrofit2.http.Field("keep") keep: Int = 0,
+        @retrofit2.http.Field("go_url") goUrl: String = "https://www.bilibili.com"
+    ): Response<LoginResponse>  // 使用 Response 以获取 Set-Cookie
+    
+    // 获取 RSA 公钥 (密码登录用)
+    @GET("x/passport-login/web/key")
+    suspend fun getWebKey(): WebKeyResponse
+    
+    // 密码登录
+    @retrofit2.http.FormUrlEncoded
+    @retrofit2.http.POST("x/passport-login/web/login")
+    suspend fun loginByPassword(
+        @retrofit2.http.Field("username") username: Long,       // 手机号
+        @retrofit2.http.Field("password") password: String,     // RSA 加密后的密码
+        @retrofit2.http.Field("keep") keep: Int = 0,
+        @retrofit2.http.Field("token") token: String,
+        @retrofit2.http.Field("challenge") challenge: String,
+        @retrofit2.http.Field("validate") validate: String,
+        @retrofit2.http.Field("seccode") seccode: String,
+        @retrofit2.http.Field("source") source: String = "main-fe-header",
+        @retrofit2.http.Field("go_url") goUrl: String = "https://www.bilibili.com"
+    ): Response<LoginResponse>
 }
 
 
 object NetworkModule {
-    private var appContext: Context? = null
+    internal var appContext: Context? = null
 
     fun init(context: Context) {
         appContext = context.applicationContext
@@ -202,29 +367,77 @@ object NetworkModule {
             .retryOnConnectionFailure(true)
             .followRedirects(true)
             .followSslRedirects(true)
+            // 🔥🔥 [关键] 添加 CookieJar 自动管理 Cookie（参考 PiliPala）
+            .cookieJar(object : okhttp3.CookieJar {
+                private val cookieStore = mutableMapOf<String, MutableList<okhttp3.Cookie>>()
+                
+                override fun saveFromResponse(url: okhttp3.HttpUrl, cookies: List<okhttp3.Cookie>) {
+                    val host = url.host
+                    val existingCookies = cookieStore.getOrPut(host) { mutableListOf() }
+                    cookies.forEach { newCookie ->
+                        // 移除同名旧 cookie，添加新 cookie
+                        existingCookies.removeAll { it.name == newCookie.name }
+                        existingCookies.add(newCookie)
+                        android.util.Log.d("CookieJar", "🍪 Saved cookie: ${newCookie.name}=${newCookie.value.take(20)}... for $host")
+                    }
+                }
+                
+                override fun loadForRequest(url: okhttp3.HttpUrl): List<okhttp3.Cookie> {
+                    val cookies = mutableListOf<okhttp3.Cookie>()
+                    
+                    // 加载存储的 cookies
+                    cookieStore[url.host]?.let { cookies.addAll(it) }
+                    
+                    // 🔥 确保 buvid3 存在
+                    var buvid3 = TokenManager.buvid3Cache
+                    if (buvid3.isNullOrEmpty()) {
+                        buvid3 = UUID.randomUUID().toString() + "infoc"
+                        TokenManager.buvid3Cache = buvid3
+                    }
+                    if (cookies.none { it.name == "buvid3" }) {
+                        cookies.add(okhttp3.Cookie.Builder()
+                            .domain(url.host)
+                            .name("buvid3")
+                            .value(buvid3)
+                            .build())
+                    }
+                    
+                    // 🔥 如果有 SESSDATA，添加它
+                    val sessData = TokenManager.sessDataCache
+                    if (!sessData.isNullOrEmpty() && cookies.none { it.name == "SESSDATA" }) {
+                        cookies.add(okhttp3.Cookie.Builder()
+                            .domain(url.host)
+                            .name("SESSDATA")
+                            .value(sessData)
+                            .build())
+                    }
+                    
+                    return cookies
+                }
+            })
             .addInterceptor { chain ->
                 val original = chain.request()
+                val url = original.url
+                var referer = "https://www.bilibili.com"
+                
+                // 🔥 如果请求中包含 bvid，构造更具体的 Referer (解决 412 问题)
+                val bvid = url.queryParameter("bvid")
+                if (!bvid.isNullOrEmpty()) {
+                    referer = "https://www.bilibili.com/video/$bvid"
+                }
+                
+                // 🔥 如果是 Space API 请求，使用 space.bilibili.com 作为 Referer
+                val mid = url.queryParameter("mid") ?: url.queryParameter("vmid")
+                if (url.encodedPath.contains("/x/space/") && !mid.isNullOrEmpty()) {
+                    referer = "https://space.bilibili.com/$mid"
+                }
+
                 val builder = original.newBuilder()
-                    .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
-                    .header("Referer", "https://www.bilibili.com")
+                    .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36")
+                    .header("Referer", referer)
+                    .header("Origin", "https://www.bilibili.com") // 🔥 增加 Origin 头
 
-                val cookieBuilder = StringBuilder()
-
-                var buvid3 = TokenManager.buvid3Cache
-                if (buvid3.isNullOrEmpty()) {
-                    buvid3 = UUID.randomUUID().toString() + "infoc"
-                    TokenManager.buvid3Cache = buvid3
-                }
-                cookieBuilder.append("buvid3=$buvid3;")
-
-                val sessData = TokenManager.sessDataCache
-                if (!sessData.isNullOrEmpty()) {
-                    cookieBuilder.append("SESSDATA=$sessData;")
-                }
-
-                val finalCookie = cookieBuilder.toString()
-                android.util.Log.d("ApiClient", "🔥 Sending request to ${original.url}, Cookie contains SESSDATA: ${sessData != null && sessData.isNotEmpty()}")
-                builder.header("Cookie", finalCookie)
+                android.util.Log.d("ApiClient", "🔥 Sending request to ${original.url}, Referer: $referer, Cookie contains SESSDATA: ${TokenManager.sessDataCache?.isNotEmpty() == true}")
 
                 chain.proceed(builder.build())
             }
@@ -252,5 +465,19 @@ object NetworkModule {
         Retrofit.Builder().baseUrl("https://api.bilibili.com/").client(okHttpClient)
             .addConverterFactory(json.asConverterFactory("application/json".toMediaType())).build()
             .create(DynamicApi::class.java)
+    }
+    
+    // 🔥 Buvid API (用于获取设备指纹)
+    val buvidApi: BuvidApi by lazy {
+        Retrofit.Builder().baseUrl("https://api.bilibili.com/").client(okHttpClient)
+            .addConverterFactory(json.asConverterFactory("application/json".toMediaType())).build()
+            .create(BuvidApi::class.java)
+    }
+    
+    // 🔥🔥 [新增] UP主空间 API
+    val spaceApi: SpaceApi by lazy {
+        Retrofit.Builder().baseUrl("https://api.bilibili.com/").client(okHttpClient)
+            .addConverterFactory(json.asConverterFactory("application/json".toMediaType())).build()
+            .create(SpaceApi::class.java)
     }
 }

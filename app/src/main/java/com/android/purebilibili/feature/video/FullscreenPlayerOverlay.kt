@@ -320,11 +320,11 @@ fun FullscreenPlayerOverlay(
                     )
                 }
                 
-                // 底部进度条
+                // 底部进度条（可拖动）
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(60.dp)
+                        .height(70.dp)
                         .align(Alignment.BottomCenter)
                         .background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = 0.6f))))
                 ) {
@@ -333,12 +333,32 @@ fun FullscreenPlayerOverlay(
                         modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).align(Alignment.Center)
                     ) {
                         Text(FormatUtils.formatDuration((currentPosition / 1000).toInt()), color = Color.White, fontSize = 12.sp)
-                        LinearProgressIndicator(
-                            progress = { currentProgress },
-                            modifier = Modifier.weight(1f).padding(horizontal = 12.dp).height(4.dp).clip(RoundedCornerShape(2.dp)),
-                            color = MaterialTheme.colorScheme.primary,
-                            trackColor = Color.White.copy(alpha = 0.3f)
+                        
+                        // 🔥 使用 Slider 替代 LinearProgressIndicator，支持拖动
+                        var isDragging by remember { mutableStateOf(false) }
+                        var dragProgress by remember { mutableFloatStateOf(0f) }
+                        
+                        Slider(
+                            value = if (isDragging) dragProgress else currentProgress,
+                            onValueChange = { newValue ->
+                                isDragging = true
+                                dragProgress = newValue
+                                lastInteractionTime = System.currentTimeMillis()
+                            },
+                            onValueChangeFinished = {
+                                isDragging = false
+                                val newPosition = (dragProgress * duration).toLong()
+                                player?.seekTo(newPosition)
+                                currentProgress = dragProgress
+                            },
+                            modifier = Modifier.weight(1f).padding(horizontal = 8.dp),
+                            colors = SliderDefaults.colors(
+                                thumbColor = MaterialTheme.colorScheme.primary,
+                                activeTrackColor = MaterialTheme.colorScheme.primary,
+                                inactiveTrackColor = Color.White.copy(alpha = 0.3f)
+                            )
                         )
+                        
                         Text(FormatUtils.formatDuration((duration / 1000).toInt()), color = Color.White, fontSize = 12.sp)
                     }
                 }

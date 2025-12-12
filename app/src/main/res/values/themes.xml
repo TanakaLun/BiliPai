@@ -1,7 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
 
-    <style name="Theme.PureBiliBili" parent="android:Theme.Material.Light.NoActionBar" />
+    <style name="Theme.PureBiliBili" parent="android:Theme.Material.Light.NoActionBar">
+        <!-- 设置窗口背景为白色，防止APP动画时显示黑色遮罩 -->
+        <item name="android:windowBackground">@android:color/white</item>
+    </style>
 
-    <style name="Theme.Purebilibili" parent="android:Theme.Material.Light.NoActionBar" />
+    <style name="Theme.Purebilibili" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@android:color/white</item>
+    </style>
 </resources>

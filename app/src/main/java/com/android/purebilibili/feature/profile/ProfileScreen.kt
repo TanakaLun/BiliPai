@@ -171,21 +171,21 @@ fun GuestProfileContent(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
-            // Logo
+            // Logo - 使用 3D 蓝色图标
             Surface(
                 shape = RoundedCornerShape(24.dp),
-                color = MaterialTheme.colorScheme.primary,
                 shadowElevation = 16.dp,
                 modifier = Modifier.size(100.dp)
             ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Text(
-                        text = "B",
-                        fontSize = 48.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.White
-                    )
-                }
+                AsyncImage(
+                    model = ImageRequest.Builder(LocalContext.current)
+                        .data(com.android.purebilibili.R.mipmap.ic_launcher_3d)
+                        .crossfade(true)
+                        .build(),
+                    contentDescription = "BiliPai",
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize()
+                )
             }
 
             Spacer(modifier = Modifier.height(32.dp))

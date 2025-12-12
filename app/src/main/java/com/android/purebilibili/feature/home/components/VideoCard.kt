@@ -21,6 +21,7 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -33,22 +34,48 @@ import com.android.purebilibili.core.util.FormatUtils
 import com.android.purebilibili.data.model.response.VideoItem
 
 /**
- * 交错进场动画 (使用 composed 实现 @Composable 效果)
+ * 🔥 交错入场动画 - 强化版
+ * 所有可见卡片都有非线性回弹动画
  */
 fun Modifier.staggeredEnter(index: Int, isVisible: Boolean): Modifier = composed {
+    // 🔥 所有卡片都应用动画，但延迟封顶避免过长等待
+    val delay = (index * 50).coerceAtMost(300)  // 每卡片 50ms，最大 300ms
+    
     val alpha by animateFloatAsState(
         targetValue = if (isVisible) 1f else 0f,
-        animationSpec = tween(durationMillis = 400, delayMillis = (index * 50).coerceAtMost(300)),
+        animationSpec = tween(
+            durationMillis = 400,
+            delayMillis = delay,
+            easing = FastOutSlowInEasing
+        ),
         label = "alpha"
     )
-    val translationY by animateDpAsState(
-        targetValue = if (isVisible) 0.dp else 30.dp,
-        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow),
+    
+    // 🔥 使用更明显的回弹效果
+    val translationY by animateFloatAsState(
+        targetValue = if (isVisible) 0f else 100f,  // 🔥 更大的位移 (100px)
+        animationSpec = spring(
+            dampingRatio = 0.55f,  // 🔥 更强的回弹 (低于 1.0 会回弹)
+            stiffness = 300f       // 🔥 较低刚度，动画更慢更明显
+        ),
         label = "translate"
     )
+    
+    // 🔥 更明显的缩放动画
+    val scale by animateFloatAsState(
+        targetValue = if (isVisible) 1f else 0.85f,  // 🔥 从 0.85 放大到 1.0
+        animationSpec = spring(
+            dampingRatio = 0.6f,
+            stiffness = 350f
+        ),
+        label = "scale_enter"
+    )
+    
     this.graphicsLayer {
         this.alpha = alpha
-        this.translationY = translationY.toPx()
+        this.translationY = translationY
+        this.scaleX = scale
+        this.scaleY = scale
     }
 }
 
@@ -56,9 +83,16 @@ fun Modifier.staggeredEnter(index: Int, isVisible: Boolean): Modifier = composed
  * 杂志感视频卡片 (含按压高亮效果)
  */
 @Composable
-fun ElegantVideoCard(video: VideoItem, index: Int, onClick: (String, Long) -> Unit) {
-    var isVisible by remember { mutableStateOf(false) }
-    LaunchedEffect(Unit) { isVisible = true }
+fun ElegantVideoCard(
+    video: VideoItem,
+    index: Int,
+    refreshKey: Long = 0L,  // 🔥 刷新标识符
+    onClick: (String, Long) -> Unit
+) {
+    // 🔥 使用 refreshKey 确保刷新时重新触发动画
+    val animationKey = "${video.bvid}_$refreshKey"
+    var isVisible by remember(animationKey) { mutableStateOf(false) }
+    LaunchedEffect(animationKey) { isVisible = true }
 
     val interactionSource = remember { MutableInteractionSource() }
     val isPressed by interactionSource.collectIsPressedAsState()
@@ -87,14 +121,23 @@ fun ElegantVideoCard(video: VideoItem, index: Int, onClick: (String, Long) -> Un
             modifier = Modifier
                 .fillMaxWidth()
                 .aspectRatio(1.6f)
-                .clip(RoundedCornerShape(16.dp))
+                .shadow(
+                    elevation = 4.dp,
+                    shape = RoundedCornerShape(12.dp),
+                    ambientColor = Color.Black.copy(alpha = 0.1f),
+                    spotColor = Color.Black.copy(alpha = 0.15f)
+                )
+                .clip(RoundedCornerShape(12.dp))
                 .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
-                .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.08f), RoundedCornerShape(16.dp))
         ) {
             AsyncImage(
                 model = ImageRequest.Builder(LocalContext.current)
                     .data(FormatUtils.fixImageUrl(if (video.pic.startsWith("//")) "https:${video.pic}" else video.pic))
-                    .crossfade(true).build(),
+                    .crossfade(200)
+                    .size(480, 300)  // 🔥 限制解码尺寸，降低内存占用
+                    .memoryCacheKey("cover_${video.bvid}")  // 🔥 统一缓存键
+                    .diskCacheKey("cover_${video.bvid}")
+                    .build(),
                 contentDescription = null,
                 modifier = Modifier.fillMaxSize(),
                 contentScale = ContentScale.Crop
@@ -203,17 +246,44 @@ fun ElegantVideoCard(video: VideoItem, index: Int, onClick: (String, Long) -> Un
         
         Spacer(modifier = Modifier.height(6.dp))
         
-        // 🔥 UP主信息行 - 添加头像缩略图
+        // 🔥 UP主信息行 - 智能统计高亮（左侧）+ 头像 + 名称
         Row(
             modifier = Modifier.padding(horizontal = 4.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // 🔥 UP主头像小图标
+            // 🔥🔥 [增强] 智能选择最突出的统计数据并在左侧红色高亮显示
+            val statRed = Color(0xFFFF4444)  // 红色
+            val stat = video.stat
+            // 计算哪个数据最突出
+            val bestStat = listOf(
+                "点赞" to stat.like,
+                "投币" to stat.coin,
+                "收藏" to stat.favorite
+            ).filter { it.second > 0 }.maxByOrNull { it.second }
+            
+            if (bestStat != null && bestStat.second >= 100) {  // 至少100才显示
+                Text(
+                    text = FormatUtils.formatStat(bestStat.second.toLong()),
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = statRed  // 🔥 红色高亮
+                )
+                Text(
+                    text = bestStat.first,
+                    fontSize = 11.sp,
+                    color = statRed  // 🔥 红色高亮
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+            }
+            
+            // 🔥 UP主头像小图标 - 优化加载
             if (video.owner.face.isNotEmpty()) {
                 AsyncImage(
                     model = ImageRequest.Builder(LocalContext.current)
                         .data(FormatUtils.fixImageUrl(video.owner.face))
-                        .crossfade(true)
+                        .crossfade(150)
+                        .size(72, 72)  // 🔥 限制头像解码尺寸
+                        .memoryCacheKey("avatar_${video.owner.mid}")
                         .build(),
                     contentDescription = null,
                     modifier = Modifier

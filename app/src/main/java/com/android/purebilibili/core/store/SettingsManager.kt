@@ -24,6 +24,10 @@ object SettingsManager {
     // 🔥🔥 [新增] 手势灵敏度和主题色
     private val KEY_GESTURE_SENSITIVITY = floatPreferencesKey("gesture_sensitivity")
     private val KEY_THEME_COLOR_INDEX = intPreferencesKey("theme_color_index")
+    // 🔥🔥 [新增] 应用图标 Key (Blue, Red, Green...)
+    private val KEY_APP_ICON = androidx.datastore.preferences.core.stringPreferencesKey("app_icon_key")
+    // 🔥🔥 [新增] 底部栏样式 (true=悬浮, false=贴底)
+    private val KEY_BOTTOM_BAR_FLOATING = booleanPreferencesKey("bottom_bar_floating")
 
     // --- Auto Play ---
     fun getAutoPlay(context: Context): Flow<Boolean> = context.settingsDataStore.data
@@ -85,6 +89,80 @@ object SettingsManager {
     suspend fun setThemeColorIndex(context: Context, index: Int) {
         context.settingsDataStore.edit { preferences -> 
             preferences[KEY_THEME_COLOR_INDEX] = index.coerceIn(0, 5)
+        }
+    }
+
+    // 🔥🔥 [新增] --- 应用图标 ---
+    fun getAppIcon(context: Context): Flow<String> = context.settingsDataStore.data
+        .map { preferences -> preferences[KEY_APP_ICON] ?: "3D" }
+
+    suspend fun setAppIcon(context: Context, iconKey: String) {
+        context.settingsDataStore.edit { preferences -> 
+            preferences[KEY_APP_ICON] = iconKey
+        }
+    }
+
+    // 🔥🔥 [新增] --- 底部栏样式 ---
+    fun getBottomBarFloating(context: Context): Flow<Boolean> = context.settingsDataStore.data
+        .map { preferences -> preferences[KEY_BOTTOM_BAR_FLOATING] ?: true }
+
+    suspend fun setBottomBarFloating(context: Context, value: Boolean) {
+        context.settingsDataStore.edit { preferences -> preferences[KEY_BOTTOM_BAR_FLOATING] = value }
+    }
+    
+    // ========== 🔥🔥 弹幕设置 ==========
+    
+    private val KEY_DANMAKU_ENABLED = booleanPreferencesKey("danmaku_enabled")
+    private val KEY_DANMAKU_OPACITY = floatPreferencesKey("danmaku_opacity")
+    private val KEY_DANMAKU_FONT_SCALE = floatPreferencesKey("danmaku_font_scale")
+    private val KEY_DANMAKU_SPEED = floatPreferencesKey("danmaku_speed")
+    private val KEY_DANMAKU_AREA = floatPreferencesKey("danmaku_area")
+    
+    // --- 弹幕开关 ---
+    fun getDanmakuEnabled(context: Context): Flow<Boolean> = context.settingsDataStore.data
+        .map { preferences -> preferences[KEY_DANMAKU_ENABLED] ?: true }
+
+    suspend fun setDanmakuEnabled(context: Context, value: Boolean) {
+        context.settingsDataStore.edit { preferences -> preferences[KEY_DANMAKU_ENABLED] = value }
+    }
+    
+    // --- 弹幕透明度 (0.0 ~ 1.0, 默认 1.0) ---
+    fun getDanmakuOpacity(context: Context): Flow<Float> = context.settingsDataStore.data
+        .map { preferences -> preferences[KEY_DANMAKU_OPACITY] ?: 1.0f }
+
+    suspend fun setDanmakuOpacity(context: Context, value: Float) {
+        context.settingsDataStore.edit { preferences -> 
+            preferences[KEY_DANMAKU_OPACITY] = value.coerceIn(0.0f, 1.0f)
+        }
+    }
+    
+    // --- 弹幕字体大小 (0.5 ~ 2.0, 默认 1.0) ---
+    fun getDanmakuFontScale(context: Context): Flow<Float> = context.settingsDataStore.data
+        .map { preferences -> preferences[KEY_DANMAKU_FONT_SCALE] ?: 1.0f }
+
+    suspend fun setDanmakuFontScale(context: Context, value: Float) {
+        context.settingsDataStore.edit { preferences -> 
+            preferences[KEY_DANMAKU_FONT_SCALE] = value.coerceIn(0.5f, 2.0f)
+        }
+    }
+    
+    // --- 弹幕速度 (0.5 ~ 2.0, 默认 1.2) ---
+    fun getDanmakuSpeed(context: Context): Flow<Float> = context.settingsDataStore.data
+        .map { preferences -> preferences[KEY_DANMAKU_SPEED] ?: 1.2f }
+
+    suspend fun setDanmakuSpeed(context: Context, value: Float) {
+        context.settingsDataStore.edit { preferences -> 
+            preferences[KEY_DANMAKU_SPEED] = value.coerceIn(0.5f, 2.0f)
+        }
+    }
+    
+    // --- 弹幕显示区域 (0.25, 0.5, 0.75, 1.0, 默认 0.5) ---
+    fun getDanmakuArea(context: Context): Flow<Float> = context.settingsDataStore.data
+        .map { preferences -> preferences[KEY_DANMAKU_AREA] ?: 0.5f }
+
+    suspend fun setDanmakuArea(context: Context, value: Float) {
+        context.settingsDataStore.edit { preferences -> 
+            preferences[KEY_DANMAKU_AREA] = value.coerceIn(0.25f, 1.0f)
         }
     }
 }

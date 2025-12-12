@@ -20,6 +20,8 @@ data class SettingsUiState(
     val bgPlay: Boolean = false,
     val gestureSensitivity: Float = 1.0f, // 🔥 新增
     val themeColorIndex: Int = 0,         // 🔥 新增
+    val appIcon: String = "3D",         // 🔥 新增
+    val isBottomBarFloating: Boolean = true, // 🔥 新增
     val cacheSize: String = "计算中..."
 )
 
@@ -31,9 +33,11 @@ private data class CoreSettings(
     val bgPlay: Boolean
 )
 
-private data class ExtraSettings(
+data class ExtraSettings(
     val gestureSensitivity: Float,
-    val themeColorIndex: Int
+    val themeColorIndex: Int,
+    val appIcon: String,
+    val isBottomBarFloating: Boolean // 🔥 新增
 )
 
 private data class BaseSettings(
@@ -42,7 +46,9 @@ private data class BaseSettings(
     val dynamicColor: Boolean,
     val bgPlay: Boolean,
     val gestureSensitivity: Float,
-    val themeColorIndex: Int
+    val themeColorIndex: Int,
+    val appIcon: String,
+    val isBottomBarFloating: Boolean
 )
 
 class SettingsViewModel(application: Application) : AndroidViewModel(application) {
@@ -65,14 +71,16 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     // 第 2 步：合并额外的 2 个设置
     private val extraSettingsFlow = combine(
         SettingsManager.getGestureSensitivity(context),
-        SettingsManager.getThemeColorIndex(context)
-    ) { gestureSensitivity, themeColorIndex ->
-        ExtraSettings(gestureSensitivity, themeColorIndex)
+        SettingsManager.getThemeColorIndex(context),
+        SettingsManager.getAppIcon(context),
+        SettingsManager.getBottomBarFloating(context) // 🔥 新增
+    ) { gestureSensitivity, themeColorIndex, appIcon, isBottomBarFloating ->
+        ExtraSettings(gestureSensitivity, themeColorIndex, appIcon, isBottomBarFloating)
     }
     
     // 第 3 步：合并两组设置
     private val baseSettingsFlow = combine(coreSettingsFlow, extraSettingsFlow) { core, extra ->
-        BaseSettings(core.hwDecode, core.themeMode, core.dynamicColor, core.bgPlay, extra.gestureSensitivity, extra.themeColorIndex)
+        BaseSettings(core.hwDecode, core.themeMode, core.dynamicColor, core.bgPlay, extra.gestureSensitivity, extra.themeColorIndex, extra.appIcon, extra.isBottomBarFloating)
     }
 
     // 第 2 步：与缓存大小合并
@@ -87,6 +95,8 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
             bgPlay = settings.bgPlay,
             gestureSensitivity = settings.gestureSensitivity, // 🔥 新增
             themeColorIndex = settings.themeColorIndex,       // 🔥 新增
+            appIcon = settings.appIcon,                       // 🔥 新增
+            isBottomBarFloating = settings.isBottomBarFloating, // 🔥 新增
             cacheSize = cacheSize
         )
     }.stateIn(
@@ -128,67 +138,45 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
-    // --- App Icon Switching ---
-
-    private val _currentIcon = MutableStateFlow(".MainActivityDefault")
-    val currentIcon: StateFlow<String> = _currentIcon
-
-    init {
-        refreshCacheSize()
+    // 🔥🔥 [新增] 切换应用图标
+    fun setAppIcon(iconKey: String) {
         viewModelScope.launch {
-            _currentIcon.value = getCurrentIconAlias()
-        }
-    }
-
-    fun getCurrentIconAlias(): String {
-        val pm = context.packageManager
-        val packageName = context.packageName
-        
-        val aliases = listOf(
-            ".MainActivityDefault", // New default alias
-            ".MainActivityMinimalist",
-            ".MainActivityGlass",
-            ".MainActivityMascot",
-            ".MainActivityMascotBlue",
-            ".MainActivityAbstract"
-        )
-
-        for (alias in aliases) {
-            val componentName = android.content.ComponentName(packageName, "$packageName$alias")
-            if (pm.getComponentEnabledSetting(componentName) == android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_ENABLED) {
-                return alias
-            }
-        }
-        // If nothing is explicitly enabled or we are in a weird state, return current expectation
-        return ".MainActivityDefault"
-    }
-
-    fun changeAppIcon(aliasName: String) {
-        viewModelScope.launch {
+            // 1. 保存偏好
+            SettingsManager.setAppIcon(context, iconKey)
+            
+            // 2. 应用 Alias
             val pm = context.packageManager
             val packageName = context.packageName
-            val currentAlias = getCurrentIconAlias()
-
-            if (currentAlias == aliasName) return@launch
-
-            // Disable current
-            val disableComponent = android.content.ComponentName(packageName, "$packageName$currentAlias")
-            pm.setComponentEnabledSetting(
-                disableComponent,
-                android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
-                android.content.pm.PackageManager.DONT_KILL_APP
-            )
-
-            // Enable new
-            val enableComponent = android.content.ComponentName(packageName, "$packageName$aliasName")
-            pm.setComponentEnabledSetting(
-                enableComponent,
-                android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_ENABLED,
-                android.content.pm.PackageManager.DONT_KILL_APP
+            
+            // alias 映射
+            val allAliases = listOf(
+                "3D" to "${packageName}.MainActivityAlias3D",
+                "Blue" to "${packageName}.MainActivityAliasBlue",
+                "Retro" to "${packageName}.MainActivityAliasRetro",
+                "Flat" to "${packageName}.MainActivityAliasFlat",
+                "Neon" to "${packageName}.MainActivityAliasNeon"
             )
             
-            // Update state (though app might restart)
-            _currentIcon.value = aliasName
+            // 找到需要启用的 alias
+            val targetAlias = allAliases.find { it.first == iconKey }?.second
+                ?: "${packageName}.MainActivityAlias3D" // 默认3D
+            
+            // 禁用所有其他 alias，启用目标 alias
+            allAliases.forEach { (_, aliasFullName) ->
+                pm.setComponentEnabledSetting(
+                    android.content.ComponentName(packageName, aliasFullName),
+                    if (aliasFullName == targetAlias) 
+                        android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_ENABLED 
+                    else 
+                        android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
+                    android.content.pm.PackageManager.DONT_KILL_APP
+                )
+            }
         }
     }
+
+    // 🔥🔥 [新增] 切换底栏样式
+    fun toggleBottomBarFloating(value: Boolean) { viewModelScope.launch { SettingsManager.setBottomBarFloating(context, value) } }
+
+
 }

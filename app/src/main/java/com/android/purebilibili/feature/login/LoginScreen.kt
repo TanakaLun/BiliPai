@@ -25,6 +25,7 @@ import kotlinx.coroutines.launch
 // 登录方式枚举
 enum class LoginMethod {
     QR_CODE,    // 扫码登录
+    PHONE_SMS,  // 🔥 手机短信登录
     WEB_LOGIN   // 网页登录
 }
 
@@ -132,8 +133,8 @@ fun LoginScreen(
                     AnimatedContent(
                         targetState = selectedMethod,
                         transitionSpec = {
-                            fadeIn(tween(300)) + slideInHorizontally { if (targetState == LoginMethod.WEB_LOGIN) it else -it } togetherWith
-                                    fadeOut(tween(300)) + slideOutHorizontally { if (targetState == LoginMethod.WEB_LOGIN) -it else it }
+                            fadeIn(tween(300)) + slideInHorizontally { if (targetState.ordinal > initialState.ordinal) it else -it } togetherWith
+                                    fadeOut(tween(300)) + slideOutHorizontally { if (targetState.ordinal > initialState.ordinal) -it else it }
                         },
                         label = "login_method"
                     ) { method ->
@@ -141,6 +142,13 @@ fun LoginScreen(
                             LoginMethod.QR_CODE -> QrCodeLoginContent(
                                 state = state,
                                 onRefresh = { viewModel.loadQrCode() }
+                            )
+                            LoginMethod.PHONE_SMS -> PhoneLoginContent(
+                                state = state,
+                                viewModel = viewModel,
+                                onLoginSuccess = {
+                                    scope.launch { onLoginSuccess() }
+                                }
                             )
                             LoginMethod.WEB_LOGIN -> WebLoginContent(
                                 onLoginSuccess = {

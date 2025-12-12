@@ -41,8 +41,6 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
-import master.flame.danmaku.danmaku.model.android.DanmakuContext
-import master.flame.danmaku.ui.widget.DanmakuView
 
 private const val TAG = "MiniPlayerManager"
 private const val NOTIFICATION_ID = 1002
@@ -106,6 +104,23 @@ class MiniPlayerManager private constructor(private val context: Context) {
 
     var currentOwner by mutableStateOf("")
         private set
+    
+    // 🔥🔥 [新增] 缓存的视频详情页 UI 状态，用于从小窗返回时恢复
+    var cachedUiState: PlayerUiState.Success? = null
+        private set
+    
+    // 🔥🔥 [新增] 缓存 UI 状态
+    fun cacheUiState(state: PlayerUiState.Success) {
+        cachedUiState = state
+        android.util.Log.d(TAG, "✅ 缓存 UI 状态: ${state.info.title}")
+    }
+    
+    // 🔥🔥 [新增] 获取并清除缓存的 UI 状态
+    fun consumeCachedUiState(): PlayerUiState.Success? {
+        val state = cachedUiState
+        // 不清除缓存，允许多次复用
+        return state
+    }
 
     // --- ExoPlayer 实例 ---
     private var _player: ExoPlayer? = null
@@ -118,15 +133,6 @@ class MiniPlayerManager private constructor(private val context: Context) {
     // --- MediaSession ---
     private var mediaSession: MediaSession? = null
 
-    // --- DanmakuView ---
-    private var _danmakuView: DanmakuView? = null
-    val danmakuView: DanmakuView?
-        get() = _danmakuView
-
-    var isDanmakuOn by mutableStateOf(true)
-
-    // --- 弹幕数据缓存 ---
-    private var cachedDanmakuData: ByteArray? = null
 
     /**
      * 初始化播放器（如果尚未初始化）
@@ -172,16 +178,6 @@ class MiniPlayerManager private constructor(private val context: Context) {
         return _player!!
     }
 
-    /**
-     * 确保弹幕View存在
-     */
-    fun ensureDanmakuView(): DanmakuView {
-        if (_danmakuView == null) {
-            Log.d(TAG, "Creating new DanmakuView instance")
-            _danmakuView = DanmakuView(context)
-        }
-        return _danmakuView!!
-    }
 
     /**
      * 开始播放新视频
@@ -270,7 +266,6 @@ class MiniPlayerManager private constructor(private val context: Context) {
         // 🔥 不释放 player，因为它属于 VideoPlayerState
         _externalPlayer = null
         currentBvid = null
-        cachedDanmakuData = null
         
         // 清除通知
         val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
@@ -321,14 +316,6 @@ class MiniPlayerManager private constructor(private val context: Context) {
         player?.seekTo(position)
     }
 
-    /**
-     * 缓存弹幕数据
-     */
-    fun cacheDanmakuData(data: ByteArray) {
-        cachedDanmakuData = data
-    }
-
-    fun getCachedDanmakuData(): ByteArray? = cachedDanmakuData
 
     /**
      * 释放所有资源
@@ -341,8 +328,6 @@ class MiniPlayerManager private constructor(private val context: Context) {
         _player?.removeListener(playerListener)
         _player?.release()
         _player = null
-        _danmakuView?.release()
-        _danmakuView = null
         INSTANCE = null
     }
 

@@ -17,8 +17,8 @@ android {
         applicationId = "com.android.purebilibili"
         minSdk = 26
         targetSdk = 34
-        versionCode = 5
-        versionName = "2.4.0"
+        versionCode = 6
+        versionName = "2.4.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -108,6 +108,7 @@ dependencies {
     // --- 4. Player (视频播放器 Media3) ---
     implementation("androidx.media3:media3-exoplayer:1.3.0")
     implementation("androidx.media3:media3-exoplayer-dash:1.3.0")
+    implementation("androidx.media3:media3-exoplayer-hls:1.3.0")  // 🔥 HLS 直播流支持
     implementation("androidx.media3:media3-ui:1.3.0")
     implementation("androidx.media3:media3-datasource-okhttp:1.3.0")
     implementation("androidx.media3:media3-session:1.3.0")

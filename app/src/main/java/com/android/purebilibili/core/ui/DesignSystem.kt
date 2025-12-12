@@ -103,24 +103,31 @@ object BiliDesign {
 }
 
 /**
- * 🔥 Shimmer 骨架屏效果 Modifier
+ * 🔥 Shimmer 骨架屏效果 Modifier - 优化版
  * 用法: Modifier.shimmer()
  */
 fun Modifier.shimmer(
-    durationMillis: Int = BiliDesign.Duration.shimmer
+    durationMillis: Int = 1000,  // 🔥 更快的动画周期
+    delayMillis: Int = 0
 ): Modifier = composed {
     val shimmerColors = listOf(
-        BiliDesign.Colors.ShimmerBase,
-        BiliDesign.Colors.ShimmerHighlight,
-        BiliDesign.Colors.ShimmerBase
+        Color(0xFFE8E8E8),         // 更亮的基础色
+        Color(0xFFF8F8F8),         // 高亮色
+        Color(0xFFFFFFFF),         // 白色峰值
+        Color(0xFFF8F8F8),
+        Color(0xFFE8E8E8)
     )
     
     val transition = rememberInfiniteTransition(label = "shimmer")
     val translateAnim by transition.animateFloat(
-        initialValue = 0f,
-        targetValue = 1000f,
+        initialValue = -500f,
+        targetValue = 1500f,  // 🔥 更大的动画范围
         animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis, easing = LinearEasing),
+            animation = tween(
+                durationMillis = durationMillis,
+                delayMillis = delayMillis,
+                easing = FastOutSlowInEasing  // 🔥 更自然的缓动
+            ),
             repeatMode = RepeatMode.Restart
         ),
         label = "shimmer_translate"
@@ -129,8 +136,8 @@ fun Modifier.shimmer(
     background(
         brush = Brush.linearGradient(
             colors = shimmerColors,
-            start = Offset(translateAnim - 500f, 0f),
-            end = Offset(translateAnim, 0f)
+            start = Offset(translateAnim, translateAnim * 0.5f),
+            end = Offset(translateAnim + 400f, translateAnim * 0.5f + 200f)  // 🔥 对角线渐变
         )
     )
 }
@@ -154,45 +161,73 @@ fun ShimmerBox(
 }
 
 /**
- * 🔥 视频卡片骨架屏
+ * 🔥 视频卡片骨架屏 - 优化版
  */
 @Composable
 fun VideoCardSkeleton(
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    index: Int = 0  // 🔥 支持交错动画延迟
 ) {
+    val delay = index * 80  // 每个卡片延迟 80ms
+    
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .padding(BiliDesign.Spacing.sm)
+            .clip(RoundedCornerShape(BiliDesign.Radius.md))
+            .background(Color(0xFFF5F5F5))  // 🔥 添加背景
+            .padding(bottom = BiliDesign.Spacing.sm)
     ) {
-        // 封面
-        ShimmerBox(
-            modifier = Modifier.fillMaxWidth(),
-            height = 180.dp,
-            radius = BiliDesign.Radius.md
-        )
-        Spacer(modifier = Modifier.height(BiliDesign.Spacing.sm))
-        
-        // 标题
-        ShimmerBox(
-            modifier = Modifier.fillMaxWidth(0.9f),
-            height = 18.dp
-        )
-        Spacer(modifier = Modifier.height(BiliDesign.Spacing.xs))
-        ShimmerBox(
-            modifier = Modifier.fillMaxWidth(0.6f),
-            height = 18.dp
+        // 封面 - 使用正确的宽高比
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .aspectRatio(16f / 9f)
+                .clip(RoundedCornerShape(BiliDesign.Radius.md))
+                .shimmer(delayMillis = delay)
         )
         
-        Spacer(modifier = Modifier.height(BiliDesign.Spacing.sm))
+        Spacer(modifier = Modifier.height(10.dp))
         
-        // UP主和播放量
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            ShimmerBox(width = 80.dp, height = 14.dp)
-            ShimmerBox(width = 60.dp, height = 14.dp)
+        // 标题区域
+        Column(modifier = Modifier.padding(horizontal = 8.dp)) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth(0.85f)
+                    .height(14.dp)
+                    .clip(RoundedCornerShape(4.dp))
+                    .shimmer(delayMillis = delay + 50)
+            )
+            Spacer(modifier = Modifier.height(6.dp))
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth(0.55f)
+                    .height(14.dp)
+                    .clip(RoundedCornerShape(4.dp))
+                    .shimmer(delayMillis = delay + 100)
+            )
+            
+            Spacer(modifier = Modifier.height(10.dp))
+            
+            // UP主和播放量
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Box(
+                    modifier = Modifier
+                        .width(70.dp)
+                        .height(12.dp)
+                        .clip(RoundedCornerShape(4.dp))
+                        .shimmer(delayMillis = delay + 150)
+                )
+                Box(
+                    modifier = Modifier
+                        .width(50.dp)
+                        .height(12.dp)
+                        .clip(RoundedCornerShape(4.dp))
+                        .shimmer(delayMillis = delay + 150)
+                )
+            }
         }
     }
 }

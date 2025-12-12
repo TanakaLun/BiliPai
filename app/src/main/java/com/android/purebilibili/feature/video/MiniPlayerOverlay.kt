@@ -60,6 +60,18 @@ fun MiniPlayerOverlay(
     onExpandClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    
+    // 🔥🔥 [核心检查] 只有在设置中开启后台播放时才显示小窗
+    // 使用 initial = true 避免设置加载前误杀小窗
+    val bgPlayEnabled by com.android.purebilibili.core.store.SettingsManager.getBgPlay(context)
+        .collectAsState(initial = true)
+    
+    // 🔥 如果后台播放未启用，不渲染小窗
+    if (!bgPlayEnabled) {
+        return
+    }
+    
     val configuration = LocalConfiguration.current
     val density = LocalDensity.current
 
@@ -97,7 +109,7 @@ fun MiniPlayerOverlay(
     var currentPosition by remember { mutableLongStateOf(0L) }
     var duration by remember { mutableLongStateOf(0L) }
     
-    // 持续监听播放器状态
+    // 持续监听播放器状态 (🔥 优化：降低轮询频率)
     LaunchedEffect(player) {
         while (true) {
             player?.let {
@@ -108,7 +120,7 @@ fun MiniPlayerOverlay(
                     currentProgress = (currentPosition.toFloat() / duration.toFloat()).coerceIn(0f, 1f)
                 }
             }
-            delay(200)
+            delay(300) // 🔥 从 200ms 改为 300ms，减少 CPU 消耗
         }
     }
     

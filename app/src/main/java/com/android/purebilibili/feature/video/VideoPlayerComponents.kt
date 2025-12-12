@@ -38,145 +38,53 @@ import com.android.purebilibili.core.theme.ActionFavoriteDark
 import com.android.purebilibili.core.theme.ActionShareDark
 import com.android.purebilibili.core.theme.ActionCommentDark
 
-// 🔥 1. 视频头部信息（优化布局和样式）
+// 🔥🔥 [重构] 视频标题区域 (仿 Bilibili 样式)
 @Composable
-fun VideoHeaderSection(
+fun VideoTitleSection(
     info: ViewInfo,
-    isFollowing: Boolean = false,
-    onFollowClick: () -> Unit = {}
+    onUpClick: (Long) -> Unit = {}
 ) {
+    var expanded by remember { mutableStateOf(false) }
+    
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .background(MaterialTheme.colorScheme.background)
-            .padding(horizontal = 16.dp, vertical = 12.dp)
+            .background(MaterialTheme.colorScheme.surface)
+            .padding(horizontal = 16.dp, vertical = 8.dp)
     ) {
-        // UP主信息行 - 简洁布局（去除多余背景）
+        // 标题行 (可展开)
         Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-                // 头像
-                AsyncImage(
-                    model = ImageRequest.Builder(LocalContext.current)
-                        .data(FormatUtils.fixImageUrl(info.owner.face))
-                        .crossfade(true)
-                        .build(),
-                    contentDescription = null,
-                    modifier = Modifier
-                        .size(46.dp)
-                        .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.surfaceVariant)
-                )
-
-                Spacer(modifier = Modifier.width(12.dp))
-
-                // UP主名称
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = info.owner.name,
-                        style = MaterialTheme.typography.titleSmall.copy(
-                            fontWeight = FontWeight.SemiBold,
-                            fontSize = 15.sp
-                        ),
-                        color = MaterialTheme.colorScheme.onBackground
-                    )
-                    Spacer(modifier = Modifier.height(2.dp))
-                    Text(
-                        text = "UP主",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                        fontSize = 11.sp
-                    )
-                }
-
-                // 🔥 关注按钮（支持状态切换）
-                Surface(
-                    onClick = onFollowClick,
-                    color = if (isFollowing) MaterialTheme.colorScheme.surfaceVariant else MaterialTheme.colorScheme.primary,
-                    shape = RoundedCornerShape(20.dp),
-                    modifier = Modifier.height(36.dp)
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.padding(horizontal = 16.dp)
-                    ) {
-                        if (!isFollowing) {
-                            Icon(
-                                Icons.Default.Add,
-                                contentDescription = null,
-                                tint = Color.White,
-                                modifier = Modifier.size(16.dp)
-                            )
-                            Spacer(modifier = Modifier.width(4.dp))
-                        }
-                        Text(
-                            text = if (isFollowing) "已关注" else "关注",
-                            fontSize = 14.sp,
-                            color = if (isFollowing) MaterialTheme.colorScheme.onSurfaceVariant else Color.White,
-                            fontWeight = FontWeight.Medium
-                        )
-                }
-            }
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        // 标题（可展开）
-        var expanded by remember { mutableStateOf(false) }
-        Text(
-            text = info.title,
-            style = MaterialTheme.typography.titleMedium.copy(
-                fontSize = 16.sp,
-                lineHeight = 22.sp,
-                fontWeight = FontWeight.Medium
-            ),
-            maxLines = if (expanded) Int.MAX_VALUE else 2,
-            overflow = TextOverflow.Ellipsis,
-            color = MaterialTheme.colorScheme.onBackground,
             modifier = Modifier
                 .fillMaxWidth()
-                .clickable { expanded = !expanded }
-                .animateContentSize()
-        )
-
-        Spacer(modifier = Modifier.height(10.dp))
-
-        // 🔥 新增: 分区标签 + 发布时间
-        Row(
-            modifier = Modifier.fillMaxWidth(),
+                .clickable { expanded = !expanded },
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // 分区标签
-            if (info.tname.isNotEmpty()) {
-                Surface(
-                    shape = RoundedCornerShape(4.dp),
-                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)
-                ) {
-                    Text(
-                        text = info.tname,
-                        fontSize = 11.sp,
-                        color = MaterialTheme.colorScheme.primary,
-                        fontWeight = FontWeight.Medium,
-                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                    )
-                }
-                Spacer(modifier = Modifier.width(8.dp))
-            }
-            
-            // 发布时间
-            if (info.pubdate > 0) {
-                Text(
-                    text = FormatUtils.formatPublishTime(info.pubdate),
-                    fontSize = 12.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
-                )
-            }
+            Text(
+                text = info.title,
+                style = MaterialTheme.typography.titleMedium.copy(
+                    fontSize = 15.sp,
+                    lineHeight = 20.sp,
+                    fontWeight = FontWeight.Medium
+                ),
+                maxLines = if (expanded) Int.MAX_VALUE else 1,
+                overflow = TextOverflow.Ellipsis,
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier
+                    .weight(1f)
+                    .animateContentSize()
+            )
+            Spacer(Modifier.width(8.dp))
+            Icon(
+                imageVector = if (expanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                modifier = Modifier.size(20.dp)
+            )
         }
-
-        Spacer(modifier = Modifier.height(8.dp))
-
-        // 数据统计行（优化图标和间距）
+        
+        Spacer(Modifier.height(4.dp))
+        
+        // 统计行 (播放量 • 弹幕 • 日期)
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
@@ -185,43 +93,125 @@ fun VideoHeaderSection(
             Icon(
                 Icons.Outlined.PlayCircle,
                 contentDescription = null,
-                modifier = Modifier.size(16.dp),
+                modifier = Modifier.size(14.dp),
                 tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
             )
-            Spacer(modifier = Modifier.width(4.dp))
+            Spacer(Modifier.width(3.dp))
             Text(
                 text = FormatUtils.formatStat(info.stat.view.toLong()),
                 fontSize = 12.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
             )
-
-            Spacer(modifier = Modifier.width(16.dp))
-
-            // 弹幕数
-            Icon(
-                Icons.Outlined.Subject,
-                contentDescription = null,
-                modifier = Modifier.size(16.dp),
-                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
-            )
-            Spacer(modifier = Modifier.width(4.dp))
+            
             Text(
-                text = FormatUtils.formatStat(info.stat.danmaku.toLong()),
+                text = "  •  ",
                 fontSize = 12.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
             )
-
-            Spacer(modifier = Modifier.width(16.dp))
-
-            // BV号
+            
+            // 弹幕
             Text(
-                text = info.bvid,
-                fontSize = 11.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                text = FormatUtils.formatStat(info.stat.danmaku.toLong()) + "弹幕",
+                fontSize = 12.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+            )
+            
+            Text(
+                text = "  •  ",
+                fontSize = 12.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
+            )
+            
+            // 发布日期
+            Text(
+                text = FormatUtils.formatPublishTime(info.pubdate),
+                fontSize = 12.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
             )
         }
     }
 }
+
+// 🔥🔥 [新增] UP主信息区域 (仿 Bilibili 样式)
+@Composable
+fun UpInfoSection(
+    info: ViewInfo,
+    isFollowing: Boolean = false,
+    onFollowClick: () -> Unit = {},
+    onUpClick: (Long) -> Unit = {}
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(MaterialTheme.colorScheme.surface)
+            .clickable { onUpClick(info.owner.mid) }
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        // 头像
+        AsyncImage(
+            model = ImageRequest.Builder(LocalContext.current)
+                .data(FormatUtils.fixImageUrl(info.owner.face))
+                .crossfade(true)
+                .build(),
+            contentDescription = null,
+            modifier = Modifier
+                .size(36.dp)
+                .clip(CircleShape)
+                .background(MaterialTheme.colorScheme.surfaceVariant)
+        )
+        
+        Spacer(Modifier.width(12.dp))
+        
+        // UP主名称 + 粉丝数
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = info.owner.name,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Medium,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Spacer(Modifier.height(2.dp))
+            Text(
+                text = "UP主",
+                fontSize = 11.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+            )
+        }
+        
+        // 关注按钮
+        Surface(
+            onClick = onFollowClick,
+            color = if (isFollowing) MaterialTheme.colorScheme.surfaceVariant else BiliPink,
+            shape = RoundedCornerShape(16.dp),
+            modifier = Modifier.height(32.dp)
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.padding(horizontal = 14.dp)
+            ) {
+                if (!isFollowing) {
+                    Icon(
+                        Icons.Default.Add,
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier.size(14.dp)
+                    )
+                    Spacer(Modifier.width(2.dp))
+                }
+                Text(
+                    text = if (isFollowing) "已关注" else "关注",
+                    fontSize = 13.sp,
+                    color = if (isFollowing) MaterialTheme.colorScheme.onSurfaceVariant else Color.White,
+                    fontWeight = FontWeight.Medium
+                )
+            }
+        }
+    }
+}
+
 
 // 🔥 2. 操作按钮行（优化布局和视觉效果）
 @Composable
@@ -241,7 +231,7 @@ fun ActionButtonsRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 12.dp, vertical = 8.dp),
+            .padding(horizontal = 8.dp, vertical = 4.dp),
         horizontalArrangement = Arrangement.SpaceEvenly
     ) {
             // 🔥 点赞 - 粉色（支持状态切换）
@@ -323,8 +313,8 @@ fun ActionButton(
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = Modifier
-            .padding(vertical = 4.dp)
-            .width(64.dp)
+            .padding(vertical = 2.dp)
+            .width(56.dp)
             .graphicsLayer {
                 scaleX = scale
                 scaleY = scale
@@ -337,7 +327,7 @@ fun ActionButton(
         // 🔥 图标容器 - 使用彩色背景，深色模式下提高透明度
         Box(
             modifier = Modifier
-                .size(44.dp)
+                .size(38.dp)
                 .clip(CircleShape)
                 .background(iconColor.copy(alpha = if (isDark) 0.15f else 0.1f)),
             contentAlignment = Alignment.Center
@@ -349,7 +339,7 @@ fun ActionButton(
                 modifier = Modifier.size(iconSize)
             )
         }
-        Spacer(modifier = Modifier.height(6.dp))
+        Spacer(modifier = Modifier.height(4.dp))
         Text(
             text = text,
             fontSize = 11.sp,
@@ -677,4 +667,80 @@ fun CoinDialog(
             }
         }
     )
+}
+
+// 🔥🔥 [新增] 视频分P选择器
+@Composable
+fun PagesSelector(
+    pages: List<com.android.purebilibili.data.model.response.Page>,
+    currentPageIndex: Int,
+    onPageSelect: (Int) -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "选集",
+                style = MaterialTheme.typography.titleMedium.copy(
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.SemiBold
+                ),
+                color = MaterialTheme.colorScheme.onBackground
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+                text = "(${pages.size}P)",
+                fontSize = 13.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+            )
+        }
+        
+        Spacer(modifier = Modifier.height(12.dp))
+        
+        // 横向滚动的分P列表
+        androidx.compose.foundation.lazy.LazyRow(
+            modifier = Modifier.fillMaxWidth(),
+            contentPadding = PaddingValues(horizontal = 16.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            items(pages.size) { index ->
+                val page = pages[index]
+                val isSelected = index == currentPageIndex
+                
+                Surface(
+                    onClick = { onPageSelect(index) },
+                    color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier.width(120.dp)
+                ) {
+                    Column(
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)
+                    ) {
+                        Text(
+                            text = "P${page.page}",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = if (isSelected) Color.White else MaterialTheme.colorScheme.primary
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = page.part.ifEmpty { "第${page.page}P" },
+                            fontSize = 13.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            color = if (isSelected) Color.White.copy(alpha = 0.9f) else MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+        }
+    }
 }

@@ -44,6 +44,7 @@ import kotlinx.coroutines.runBlocking
 
 import com.android.purebilibili.feature.video.MiniPlayerManager
 import com.android.purebilibili.feature.video.MiniPlayerOverlay
+import coil.compose.AsyncImage
 
 private const val TAG = "MainActivity"
 private const val PREFS_NAME = "app_welcome"
@@ -153,9 +154,10 @@ class MainActivity : ComponentActivity() {
                                 miniPlayerManager.enterMiniMode()
                             },
                             onNavigateToDetail = {
-                                // 🔥 返回时导航到视频详情页
+                                // 🔥 关闭全屏覆盖层并导航到视频详情页
                                 showFullscreen = false
                                 miniPlayerManager.currentBvid?.let { bvid ->
+                                    // 🔥 导航到视频详情页，播放器通过 MiniPlayerManager 复用
                                     navController.navigate("video/$bvid?cid=0&cover=") {
                                         launchSingleTop = true
                                     }
@@ -230,12 +232,13 @@ fun WelcomeDialog(onDismiss: () -> Unit) {
                 modifier = Modifier.fillMaxWidth()
             ) {
                 // 🔥 应用 Logo - 使用实际应用图标
-                Image(
-                    painter = painterResource(id = R.mipmap.ic_launcher_mascot_blue),
+                AsyncImage(
+                    model = R.mipmap.ic_launcher,
                     contentDescription = "BiliPai Logo",
                     modifier = Modifier
                         .size(88.dp)
                         .clip(RoundedCornerShape(20.dp))
+                        .background(MaterialTheme.colorScheme.primaryContainer)
                 )
                 
                 Spacer(modifier = Modifier.height(16.dp))

@@ -6,9 +6,14 @@ import androidx.lifecycle.viewModelScope
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
+import com.android.purebilibili.data.model.VideoLoadError
 import com.android.purebilibili.data.model.response.RelatedVideo
 import com.android.purebilibili.data.model.response.ReplyItem
 import com.android.purebilibili.data.model.response.ViewInfo
+import com.android.purebilibili.data.model.response.DashVideo
+import com.android.purebilibili.data.model.response.DashAudio
+import com.android.purebilibili.data.model.response.getBestVideo
+import com.android.purebilibili.data.model.response.getBestAudio
 import com.android.purebilibili.data.repository.VideoRepository
 import kotlinx.coroutines.async
 import kotlinx.coroutines.channels.Channel
@@ -18,19 +23,30 @@ import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
 import java.io.InputStream
 
-// 移除 SubReplyUiState 定义，移入 VideoCommentViewModel.kt
-
 sealed class PlayerUiState {
-    object Loading : PlayerUiState()
+    // 🔥 增强 Loading 状态：包含重试进度信息
+    data class Loading(
+        val retryAttempt: Int = 0,
+        val maxAttempts: Int = 4,
+        val message: String = "加载中..."
+    ) : PlayerUiState() {
+        companion object {
+            val Initial = Loading()
+        }
+    }
+    
     data class Success(
         val info: ViewInfo,
         val playUrl: String,
+        val audioUrl: String? = null,  // 🔥 添加音频 URL
         val related: List<RelatedVideo> = emptyList(),
-        val danmakuData: ByteArray? = null,
         val currentQuality: Int = 64,
         val qualityLabels: List<String> = emptyList(),
         val qualityIds: List<Int> = emptyList(),
         val startPosition: Long = 0L,
+        // 🔥🔥 [新增] 缓存的 DASH 流数据，用于切换清晰度
+        val cachedDashVideos: List<DashVideo> = emptyList(),
+        val cachedDashAudios: List<DashAudio> = emptyList(),
         // 🔥 新增：清晰度切换状态
         val isQualitySwitching: Boolean = false,
         val requestedQuality: Int? = null, // 用户请求的清晰度，用于显示降级提示
@@ -48,11 +64,19 @@ sealed class PlayerUiState {
 
         val emoteMap: Map<String, String> = emptyMap()
     ) : PlayerUiState()
-    data class Error(val msg: String) : PlayerUiState()
+    
+    // 🔥 增强 Error 状态：使用 VideoLoadError 类型
+    data class Error(
+        val error: VideoLoadError,
+        val canRetry: Boolean = true
+    ) : PlayerUiState() {
+        // 兼容旧代码的便捷属性
+        val msg: String get() = error.toUserMessage()
+    }
 }
 
 class PlayerViewModel : ViewModel() {
-    private val _uiState = MutableStateFlow<PlayerUiState>(PlayerUiState.Loading)
+    private val _uiState = MutableStateFlow<PlayerUiState>(PlayerUiState.Loading())
     val uiState = _uiState.asStateFlow()
 
     // 移除 subReplyState
@@ -239,6 +263,67 @@ class PlayerViewModel : ViewModel() {
             }
         }
     }
+    
+    // 🔥🔥 [新增] 视频分P切换
+    fun switchPage(pageIndex: Int) {
+        val current = _uiState.value as? PlayerUiState.Success ?: return
+        val pages = current.info.pages
+        if (pageIndex < 0 || pageIndex >= pages.size) return
+        
+        val page = pages[pageIndex]
+        if (page.cid == currentCid) {
+            viewModelScope.launch { _toastEvent.send("已是当前分P") }
+            return
+        }
+        
+        android.util.Log.d("PlayerVM", "🔥 switchPage: index=$pageIndex, cid=${page.cid}, part=${page.part}")
+        currentCid = page.cid
+        
+        viewModelScope.launch {
+            _uiState.value = current.copy(isQualitySwitching = true)
+            
+            try {
+                val playUrlData = VideoRepository.getPlayUrlData(currentBvid, page.cid, current.currentQuality)
+                
+                if (playUrlData != null) {
+                    val dashVideo = playUrlData.dash?.getBestVideo(current.currentQuality)
+                    val dashAudio = playUrlData.dash?.getBestAudio()
+                    val videoUrl = dashVideo?.getValidUrl() 
+                        ?: playUrlData.durl?.firstOrNull()?.url ?: ""
+                    val audioUrl = dashAudio?.getValidUrl()
+                    
+                    if (videoUrl.isNotEmpty()) {
+                        if (dashVideo != null) {
+                            playDashVideo(videoUrl, audioUrl, 0L)
+                        } else {
+                            playVideo(videoUrl, 0L, forceReset = true)
+                        }
+                        
+                        // 更新 info 中的 cid
+                        val newInfo = current.info.copy(cid = page.cid)
+                        _uiState.value = current.copy(
+                            info = newInfo,
+                            playUrl = videoUrl,
+                            audioUrl = audioUrl,
+                            startPosition = 0L,
+                            isQualitySwitching = false,
+                            cachedDashVideos = playUrlData.dash?.video ?: emptyList(),
+                            cachedDashAudios = playUrlData.dash?.audio ?: emptyList()
+                        )
+                        _toastEvent.send("已切换至 P${pageIndex + 1}")
+                        return@launch
+                    }
+                }
+                
+                _uiState.value = current.copy(isQualitySwitching = false)
+                _toastEvent.send("分P切换失败")
+            } catch (e: Exception) {
+                _uiState.value = current.copy(isQualitySwitching = false)
+                _toastEvent.send("分P切换失败: ${e.message}")
+            }
+        }
+    }
+    
     fun seekTo(pos: Long) { exoPlayer?.seekTo(pos) }
 
     override fun onCleared() {
@@ -300,12 +385,35 @@ class PlayerViewModel : ViewModel() {
         player.prepare()
         player.playWhenReady = true
     }
+    
+    // 🔥🔥 [新增] 从缓存恢复 UI 状态，避免网络重载
+    fun restoreFromCache(cachedState: PlayerUiState.Success, startPosition: Long = -1L) {
+        android.util.Log.d("PlayerVM", "🔥 Restoring from cache: ${cachedState.info.title}, position=$startPosition")
+        currentBvid = cachedState.info.bvid
+        currentCid = cachedState.info.cid
+        
+        // 更新状态，保持播放进度
+        val restoredState = if (startPosition >= 0) {
+            cachedState.copy(startPosition = startPosition)
+        } else {
+            cachedState
+        }
+        _uiState.value = restoredState
+    }
 
     fun loadVideo(bvid: String) {
         if (bvid.isBlank()) return
+        
+        // 🔥 如果已经加载过相同的视频，跳过重载（保持进度）
+        val currentState = _uiState.value
+        if (currentBvid == bvid && currentState is PlayerUiState.Success) {
+            android.util.Log.d("PlayerVM", "🔥 Same video already loaded, skip reload: $bvid")
+            return
+        }
+        
         currentBvid = bvid
         viewModelScope.launch {
-            _uiState.value = PlayerUiState.Loading
+            _uiState.value = PlayerUiState.Loading()
 
             val detailDeferred = async { VideoRepository.getVideoDetails(bvid) }
             val relatedDeferred = async { VideoRepository.getRelatedVideos(bvid) }
@@ -317,24 +425,37 @@ class PlayerViewModel : ViewModel() {
 
             detailResult.onSuccess { (info, playData) ->
                 currentCid = info.cid
-                android.util.Log.d("PlayerVM", "Fetching danmaku for cid: $currentCid")
-                val danmaku = VideoRepository.getDanmakuRawData(info.cid)
-                android.util.Log.d("PlayerVM", "Danmaku data result: ${danmaku?.size ?: 0} bytes")
-                // 🔥 DASH 格式处理：分别获取视频和音频 URL
-                val dashVideo = playData.dash?.video?.firstOrNull()
-                val dashAudio = playData.dash?.audio?.firstOrNull()
-                val videoUrl = dashVideo?.baseUrl ?: playData.durl?.firstOrNull()?.url ?: ""
-                val audioUrl = dashAudio?.baseUrl  // 可能为 null
-                android.util.Log.d("PlayerVM", "🔥 DASH: video=${dashVideo?.id ?: "none"}, audio=${dashAudio?.id ?: "none"}")
+                // 弹幕功能已移除，后续开发
+                
+                // 🔥🔥 [修复] 使用扩展函数选择最佳视频和音频流，增加更多 fallback
+                val targetQn = playData.quality.takeIf { it > 0 } ?: 64
+                android.util.Log.d("PlayerVM", "🔍 loadVideo: targetQn=$targetQn, dash=${playData.dash != null}, dashVideoCount=${playData.dash?.video?.size ?: 0}, durlCount=${playData.durl?.size ?: 0}")
+                
+                val dashVideo = playData.dash?.getBestVideo(targetQn)
+                val dashAudio = playData.dash?.getBestAudio()
+                
+                // 🔥🔥 [修复] 多层 fallback 确保能获取视频 URL
+                val videoUrl = dashVideo?.getValidUrl()?.takeIf { it.isNotEmpty() }
+                    ?: playData.dash?.video?.firstOrNull()?.baseUrl?.takeIf { it.isNotEmpty() }  // 直接访问第一个视频
+                    ?: playData.dash?.video?.firstOrNull()?.backupUrl?.firstOrNull()?.takeIf { it.isNotEmpty() }  // 第一个视频的备用 URL
+                    ?: playData.durl?.firstOrNull()?.url?.takeIf { it.isNotEmpty() }  // durl 格式
+                    ?: playData.durl?.firstOrNull()?.backup_url?.firstOrNull()  // durl 备用
+                    ?: ""
+                    
+                val audioUrl = dashAudio?.getValidUrl()?.takeIf { it.isNotEmpty() }
+                    ?: playData.dash?.audio?.firstOrNull()?.baseUrl?.takeIf { it.isNotEmpty() }  // 直接访问第一个音频
+                
+                android.util.Log.d("PlayerVM", "🔥 VideoUrl: ${if (videoUrl.isNotEmpty()) "${videoUrl.take(60)}..." else "EMPTY!"}")
+                android.util.Log.d("PlayerVM", "🔥 AudioUrl: ${if (audioUrl?.isNotEmpty() == true) "${audioUrl.take(60)}..." else "null"}")
                 
                 val qualities = playData.accept_quality ?: emptyList()
                 val labels = playData.accept_description ?: emptyList()
                 // 🔥 使用正在播放的 DASH 视频画质，而不是 durl 画质
-                val realQuality = dashVideo?.id ?: playData.quality
+                val realQuality = dashVideo?.id ?: playData.dash?.video?.firstOrNull()?.id ?: playData.quality
 
                 if (videoUrl.isNotEmpty()) {
                     // 🔥 根据是否有音频流选择播放方式
-                    if (dashVideo != null) {
+                    if (playData.dash != null) {
                         playDashVideo(videoUrl, audioUrl, 0L)
                     } else {
                         playVideo(videoUrl)
@@ -370,12 +491,16 @@ class PlayerViewModel : ViewModel() {
                     _uiState.value = PlayerUiState.Success(
                         info = info,
                         playUrl = videoUrl,
+                        audioUrl = audioUrl,  // 🔥 保存音频 URL
                         related = relatedVideos,
-                        danmakuData = danmaku,
+
                         currentQuality = realQuality,
                         qualityIds = qualities,
                         qualityLabels = labels,
                         startPosition = 0L,
+                        // 🔥🔥 缓存 DASH 流，用于切换清晰度时不需要再请求 API
+                        cachedDashVideos = playData.dash?.video ?: emptyList(),
+                        cachedDashAudios = playData.dash?.audio ?: emptyList(),
                         emoteMap = emoteMap,
                         isLoggedIn = isLogin,
                         isVip = isVip,
@@ -384,14 +509,41 @@ class PlayerViewModel : ViewModel() {
                         isLiked = isLiked,
                         coinCount = coinCount
                     )
+                    
+                    // 🔥🔥 [新增] 上报播放心跳，记录到历史记录
+                    launch {
+                        VideoRepository.reportPlayHeartbeat(bvid, info.cid, 0)
+                    }
+                    
                     // 移除 loadComments 调用
                 } else {
-                    _uiState.value = PlayerUiState.Error("无法获取播放地址")
+                    _uiState.value = PlayerUiState.Error(
+                        error = VideoLoadError.UnknownError(Exception("无法获取播放地址")),
+                        canRetry = true
+                    )
                 }
-            }.onFailure {
-                _uiState.value = PlayerUiState.Error(it.message ?: "加载失败")
+            }.onFailure { e ->
+                _uiState.value = PlayerUiState.Error(
+                    error = VideoLoadError.fromException(e),
+                    canRetry = VideoLoadError.fromException(e).isRetryable()
+                )
             }
         }
+    }
+    
+    // 🔥🔥 [新增] 重试功能
+    fun retry() {
+        val bvid = currentBvid
+        if (bvid.isBlank()) return
+        
+        android.util.Log.d("PlayerVM", "🔄 Retrying video load: $bvid")
+        
+        // 清除可能过期的缓存
+        com.android.purebilibili.core.cache.PlayUrlCache.invalidate(bvid, currentCid)
+        
+        // 重置状态并重新加载
+        currentBvid = "" // 允许重新加载
+        loadVideo(bvid)
     }
     
     // 移除 loadComments, openSubReply, closeSubReply, loadMoreSubReplies, loadSubReplies
@@ -418,10 +570,55 @@ class PlayerViewModel : ViewModel() {
                 )
 
                 try {
-                    fetchAndPlay(
-                        currentBvid, currentCid, qualityId,
-                        currentState, currentPos
-                    )
+                    // 🔥🔥 [优化] 优先使用缓存的 DASH 流，避免重复 API 请求导致 412
+                    val cachedVideos = currentState.cachedDashVideos
+                    val cachedAudios = currentState.cachedDashAudios
+                    
+                    android.util.Log.d("PlayerVM", "🔥 changeQuality: requested=$qualityId, cachedVideos=${cachedVideos.map { it.id }}")
+                    
+                    if (cachedVideos.isNotEmpty()) {
+                        // 从缓存中查找目标画质
+                        val dashVideo = cachedVideos.find { it.id == qualityId }
+                            ?: cachedVideos.filter { it.id <= qualityId }.maxByOrNull { it.id }
+                            ?: cachedVideos.minByOrNull { it.id }
+                        
+                        val dashAudio = cachedAudios.firstOrNull()
+                        val videoUrl = dashVideo?.getValidUrl() ?: ""
+                        val audioUrl = dashAudio?.getValidUrl()
+                        val realQuality = dashVideo?.id ?: qualityId
+                        
+                        android.util.Log.d("PlayerVM", "🔥 Using cached DASH: found=$realQuality, url=${videoUrl.take(50)}...")
+                        
+                        if (videoUrl.isNotEmpty()) {
+                            playDashVideo(videoUrl, audioUrl, currentPos)
+                            
+                            _uiState.value = currentState.copy(
+                                playUrl = videoUrl,
+                                audioUrl = audioUrl,
+                                currentQuality = realQuality,
+                                startPosition = currentPos,
+                                isQualitySwitching = false,
+                                requestedQuality = null
+                            )
+                            
+                            val labels = currentState.qualityLabels
+                            val qualities = currentState.qualityIds
+                            val targetLabel = labels.getOrNull(qualities.indexOf(qualityId)) ?: "$qualityId"
+                            val realLabel = labels.getOrNull(qualities.indexOf(realQuality)) ?: "$realQuality"
+                            
+                            if (realQuality != qualityId) {
+                                _toastEvent.send("⚠️ $targetLabel 不可用，已切换至 $realLabel")
+                            } else {
+                                _toastEvent.send("✓ 已切换至 $realLabel")
+                            }
+                            return@launch
+                        }
+                    }
+                    
+                    // 🔥 缓存中没有，fallback 到 API 请求
+                    android.util.Log.d("PlayerVM", "🔥 Cache miss, falling back to API request")
+                    fetchAndPlay(currentBvid, currentCid, qualityId, currentState, currentPos)
+                    
                 } catch (e: Exception) {
                     // 🔥 切换失败，恢复状态
                     _uiState.value = currentState.copy(
@@ -441,19 +638,38 @@ class PlayerViewModel : ViewModel() {
     ) {
         // 调用 Repository 获取新画质链接
         val playUrlData = VideoRepository.getPlayUrlData(bvid, cid, qn)
-
-        // 🔥 DASH 格式处理：找到对应画质的视频，并获取最佳音频
-        val dashVideo = playUrlData?.dash?.video?.find { it.id == qn }
-            ?: playUrlData?.dash?.video?.firstOrNull()
-        val dashAudio = playUrlData?.dash?.audio?.firstOrNull()  // 选择最高质量音频
-        val videoUrl = dashVideo?.baseUrl ?: playUrlData?.durl?.firstOrNull()?.url ?: ""
-        val audioUrl = dashAudio?.baseUrl
-        android.util.Log.d("PlayerVM", "🔥 fetchAndPlay DASH: video=${dashVideo?.id ?: "none"}, audio=${dashAudio?.id ?: "none"}")
         
-        val qualities = playUrlData?.accept_quality ?: emptyList()
-        val labels = playUrlData?.accept_description ?: emptyList()
+        // 🔥 添加调试日志
+        android.util.Log.d("PlayerVM", "🔥 fetchAndPlay: playUrlData=${if (playUrlData != null) "OK" else "NULL"}")
+        
+        if (playUrlData == null) {
+            android.util.Log.e("PlayerVM", "❌ getPlayUrlData returned null for bvid=$bvid, cid=$cid, qn=$qn")
+            _uiState.value = currentState.copy(
+                isQualitySwitching = false,
+                requestedQuality = null
+            )
+            _toastEvent.send("获取播放地址失败，请重试")
+            return
+        }
+        
+        // 🔥🔥 [优化] 使用扩展函数选择最佳视频流（支持备用 URL 和编码优先级）
+        val dashVideo = playUrlData.dash?.getBestVideo(qn)
+        val dashAudio = playUrlData.dash?.getBestAudio()
+        
+        android.util.Log.d("PlayerVM", "🔥 fetchAndPlay: requested=$qn, found=${dashVideo?.id ?: "none"}, codec=${dashVideo?.codecs ?: "none"}")
+        
+        // 🔥 使用 getValidUrl 扩展函数，自动 fallback 到备用 URL
+        val videoUrl = dashVideo?.getValidUrl() 
+            ?: playUrlData.durl?.firstOrNull()?.url?.takeIf { it.isNotEmpty() }
+            ?: playUrlData.durl?.firstOrNull()?.backup_url?.firstOrNull()
+            ?: ""
+        val audioUrl = dashAudio?.getValidUrl()
+        android.util.Log.d("PlayerVM", "🔥 fetchAndPlay: videoUrl=${videoUrl.take(50)}...")
+        
+        val qualities = playUrlData.accept_quality ?: emptyList()
+        val labels = playUrlData.accept_description ?: emptyList()
         // 🔥 使用正在播放的 DASH 视频画质
-        val realQuality = dashVideo?.id ?: playUrlData?.quality ?: qn
+        val realQuality = dashVideo?.id ?: playUrlData.quality ?: qn
 
         if (videoUrl.isNotEmpty()) {
             // 🔥 使用 DASH 播放（如果有音频流）或普通播放
@@ -479,7 +695,7 @@ class PlayerViewModel : ViewModel() {
             val realLabel = labels.getOrNull(qualities.indexOf(realQuality)) ?: "$realQuality"
 
             if (realQuality != qn) {
-                _toastEvent.send("⚠️ $targetLabel 需要登录大会员，已自动切换至 $realLabel")
+                _toastEvent.send("⚠️ $targetLabel 不可用，已切换至 $realLabel")
             } else {
                 _toastEvent.send("✓ 已切换至 $realLabel")
             }

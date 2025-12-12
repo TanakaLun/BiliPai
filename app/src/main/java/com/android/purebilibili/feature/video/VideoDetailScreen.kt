@@ -26,7 +26,9 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalConfiguration
@@ -35,12 +37,12 @@ import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.clickable
+import androidx.compose.ui.draw.clip
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.android.purebilibili.core.theme.BiliPink
-import com.android.purebilibili.core.util.BiliDanmakuParser
-import com.android.purebilibili.core.util.StreamDataSource
+
 import com.android.purebilibili.data.model.response.RelatedVideo
 import com.android.purebilibili.data.model.response.ReplyItem
 import com.android.purebilibili.data.model.response.ViewInfo
@@ -54,6 +56,7 @@ fun VideoDetailScreen(
     bvid: String,
     coverUrl: String,
     onBack: () -> Unit,
+    onUpClick: (Long) -> Unit = {},  // 🔥 点击 UP 主头像
     miniPlayerManager: MiniPlayerManager? = null,
     isInPipMode: Boolean = false,
     isVisible: Boolean = true,
@@ -111,6 +114,26 @@ fun VideoDetailScreen(
         viewModel = viewModel,
         bvid = bvid
     )
+    
+    // 🔥🔥 [性能优化] 生命周期感知：进入后台时暂停播放，返回前台时继续
+    val lifecycleOwner = androidx.compose.ui.platform.LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            when (event) {
+                androidx.lifecycle.Lifecycle.Event.ON_PAUSE -> {
+                    playerState.player.pause()
+                }
+                androidx.lifecycle.Lifecycle.Event.ON_RESUME -> {
+                    playerState.player.play()
+                }
+                else -> {}
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
 
     // 🔥🔥🔥 核心修改：初始化评论 & 媒体中心信息
     LaunchedEffect(uiState) {
@@ -138,7 +161,9 @@ fun VideoDetailScreen(
                     owner = info.owner.name,
                     externalPlayer = playerState.player
                 )
-                android.util.Log.d("VideoDetailScreen", "✅ setVideoInfo 调用完成")
+                // 🔥🔥 [新增] 缓存完整 UI 状态，用于从小窗返回时恢复
+                miniPlayerManager.cacheUiState(success)
+                android.util.Log.d("VideoDetailScreen", "✅ setVideoInfo + cacheUiState 调用完成")
             } else {
                 android.util.Log.w("VideoDetailScreen", "⚠️ miniPlayerManager 是 null!")
             }
@@ -162,6 +187,11 @@ fun VideoDetailScreen(
         } else {
             activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
         }
+    }
+
+    // 🔥 拦截系统返回键：如果是全屏模式，则先退出全屏
+    BackHandler(enabled = isLandscape) {
+        toggleOrientation()
     }
 
     // 沉浸式状态栏控制
@@ -216,7 +246,9 @@ fun VideoDetailScreen(
                     onBack = { toggleOrientation() }
                 )
             } else {
+                // 🔥🔥 B站风格布局：视频 + 内容区域
                 Column(modifier = Modifier.fillMaxSize()) {
+                    // 1. 播放器区域（标准 16:9 比例）
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -234,45 +266,108 @@ fun VideoDetailScreen(
                         )
                     }
 
-                    when (uiState) {
-                        is PlayerUiState.Loading -> {
-                            // 🔥 播放器加载圈 + 下方骨架屏
-                            VideoDetailSkeleton()
-                        }
+                    // 2. 内容区域（填充剩余空间）
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(MaterialTheme.colorScheme.background)
+                    ) {
+                        when (uiState) {
+                            is PlayerUiState.Loading -> {
+                                val loadingState = uiState as PlayerUiState.Loading
+                                // 🔥 显示重试进度
+                                if (loadingState.retryAttempt > 0) {
+                                    Box(
+                                        modifier = Modifier.fillMaxSize(),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                            CircularProgressIndicator(
+                                                color = MaterialTheme.colorScheme.primary
+                                            )
+                                            Spacer(Modifier.height(16.dp))
+                                            Text(
+                                                text = "正在重试 ${loadingState.retryAttempt}/${loadingState.maxAttempts}...",
+                                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                                                fontSize = 14.sp
+                                            )
+                                        }
+                                    }
+                                } else {
+                                    VideoDetailSkeleton()
+                                }
+                            }
 
-                        is PlayerUiState.Success -> {
-                            val success = uiState as PlayerUiState.Success
-                            VideoContentSection(
-                                info = success.info,
-                                relatedVideos = success.related,
-                                replies = commentState.replies, // 🔥
-                                replyCount = commentState.replyCount, // 🔥
-                                emoteMap = success.emoteMap,
-                                isRepliesLoading = commentState.isRepliesLoading, // 🔥
-                                isFollowing = success.isFollowing,
-                                isFavorited = success.isFavorited,
-                                isLiked = success.isLiked,
-                                coinCount = success.coinCount,
-                                onFollowClick = { viewModel.toggleFollow() },
-                                onFavoriteClick = { viewModel.toggleFavorite() },
-                                onLikeClick = { viewModel.toggleLike() },
-                                onCoinClick = { viewModel.openCoinDialog() },
-                                onTripleClick = { viewModel.doTripleAction() },
-                                onRelatedVideoClick = { vid -> viewModel.loadVideo(vid) },
-                                onSubReplyClick = { commentViewModel.openSubReply(it) }, // 🔥
-                                onLoadMoreReplies = { commentViewModel.loadComments() } // 🔥
-                            )
-                        }
+                            is PlayerUiState.Success -> {
+                                val success = uiState as PlayerUiState.Success
+                                // 🔥 计算当前分P索引
+                                val currentPageIndex = success.info.pages.indexOfFirst { it.cid == success.info.cid }.coerceAtLeast(0)
+                                
+                                VideoContentSection(
+                                    info = success.info,
+                                    relatedVideos = success.related,
+                                    replies = commentState.replies,
+                                    replyCount = commentState.replyCount,
+                                    emoteMap = success.emoteMap,
+                                    isRepliesLoading = commentState.isRepliesLoading,
+                                    isFollowing = success.isFollowing,
+                                    isFavorited = success.isFavorited,
+                                    isLiked = success.isLiked,
+                                    coinCount = success.coinCount,
+                                    currentPageIndex = currentPageIndex,
+                                    onFollowClick = { viewModel.toggleFollow() },
+                                    onFavoriteClick = { viewModel.toggleFavorite() },
+                                    onLikeClick = { viewModel.toggleLike() },
+                                    onCoinClick = { viewModel.openCoinDialog() },
+                                    onTripleClick = { viewModel.doTripleAction() },
+                                    onPageSelect = { viewModel.switchPage(it) },
+                                    onUpClick = onUpClick,
+                                    onRelatedVideoClick = { vid -> viewModel.loadVideo(vid) },
+                                    onSubReplyClick = { commentViewModel.openSubReply(it) },
+                                    onLoadMoreReplies = { commentViewModel.loadComments() }
+                                )
+                            }
 
-                        is PlayerUiState.Error -> {
-                            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                    Text((uiState as PlayerUiState.Error).msg)
-                                    Spacer(Modifier.height(16.dp))
-                                    Button(
-                                        onClick = { viewModel.loadVideo(bvid) },
-                                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
-                                    ) { Text("重试") }
+                            is PlayerUiState.Error -> {
+                                val errorState = uiState as PlayerUiState.Error
+                                Box(
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Column(
+                                        horizontalAlignment = Alignment.CenterHorizontally,
+                                        modifier = Modifier.padding(32.dp)
+                                    ) {
+                                        // 🔥 根据错误类型显示不同图标
+                                        Text(
+                                            text = when (errorState.error) {
+                                                is com.android.purebilibili.data.model.VideoLoadError.NetworkError -> "📡"
+                                                is com.android.purebilibili.data.model.VideoLoadError.VideoNotFound -> "🔍"
+                                                is com.android.purebilibili.data.model.VideoLoadError.RegionRestricted -> "🌐"
+                                                else -> "⚠️"
+                                            },
+                                            fontSize = 48.sp
+                                        )
+                                        Spacer(Modifier.height(16.dp))
+                                        Text(
+                                            text = errorState.msg,
+                                            color = MaterialTheme.colorScheme.onSurface,
+                                            fontSize = 16.sp,
+                                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                                        )
+                                        // 🔥 只有可重试的错误才显示重试按钮
+                                        if (errorState.canRetry) {
+                                            Spacer(Modifier.height(24.dp))
+                                            Button(
+                                                onClick = { viewModel.retry() },
+                                                colors = ButtonDefaults.buttonColors(
+                                                    containerColor = MaterialTheme.colorScheme.primary
+                                                )
+                                            ) {
+                                                Text("重试")
+                                            }
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -375,37 +470,43 @@ fun VideoContentSection(
     replyCount: Int,
     emoteMap: Map<String, String>,
     isRepliesLoading: Boolean,
-    isFollowing: Boolean = false,
-    isFavorited: Boolean = false,
-    isLiked: Boolean = false,
-    coinCount: Int = 0,
-    onFollowClick: () -> Unit = {},
-    onFavoriteClick: () -> Unit = {},
-    onLikeClick: () -> Unit = {},
-    onCoinClick: () -> Unit = {},
-    onTripleClick: () -> Unit = {},
+    isFollowing: Boolean,
+    isFavorited: Boolean,
+    isLiked: Boolean,
+    coinCount: Int,
+    currentPageIndex: Int,
+    onFollowClick: () -> Unit,
+    onFavoriteClick: () -> Unit,
+    onLikeClick: () -> Unit,
+    onCoinClick: () -> Unit,
+    onTripleClick: () -> Unit,
+    onPageSelect: (Int) -> Unit,
+    onUpClick: (Long) -> Unit,
     onRelatedVideoClick: (String) -> Unit,
     onSubReplyClick: (ReplyItem) -> Unit,
     onLoadMoreReplies: () -> Unit
 ) {
     val listState = rememberLazyListState()
     val coroutineScope = rememberCoroutineScope()
-    // 粗略计算评论区的 Index
-    val commentHeaderIndex = 6 + relatedVideos.size + 1
-
+    
+    // Tab 状态
+    var selectedTabIndex by remember { mutableIntStateOf(0) }
+    val tabs = listOf("简介", "评论 $replyCount")
+    
     LazyColumn(
         state = listState,
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(bottom = 32.dp)
     ) {
-        item { 
-            VideoHeaderSection(
+        // 1. 标题和统计行 (置顶)
+        item {
+            VideoTitleSection(
                 info = info,
-                isFollowing = isFollowing,
-                onFollowClick = onFollowClick
-            ) 
+                onUpClick = onUpClick
+            )
         }
 
+        // 2. 操作按钮行
         item {
             ActionButtonsRow(
                 info = info,
@@ -417,80 +518,151 @@ fun VideoContentSection(
                 onCoinClick = onCoinClick,
                 onTripleClick = onTripleClick,
                 onCommentClick = {
-                    coroutineScope.launch {
-                        listState.animateScrollToItem(commentHeaderIndex)
+                    selectedTabIndex = 1 // 切换到评论 Tab
+                    // 可选：滚动到评论位置
+                }
+            )
+        }
+
+        // 3. Tab 栏
+        item { // 使用 stickyHeader 如果想吸顶，但这里普通 item 即可，或者 lazyColumn 外面套 column
+             Column {
+                TabRow(
+                    selectedTabIndex = selectedTabIndex,
+                    containerColor = MaterialTheme.colorScheme.surface,
+                    contentColor = BiliPink,
+                    indicator = { tabPositions ->
+                        TabRowDefaults.SecondaryIndicator(
+                            Modifier.tabIndicatorOffset(tabPositions[selectedTabIndex]),
+                            color = BiliPink
+                        )
+                    }
+                ) {
+                    tabs.forEachIndexed { index, title ->
+                        Tab(
+                            selected = selectedTabIndex == index,
+                            onClick = { selectedTabIndex = index },
+                            text = {
+                                Text(
+                                    title,
+                                    fontSize = 14.sp,
+                                    fontWeight = if (selectedTabIndex == index) FontWeight.Bold else FontWeight.Normal
+                                )
+                            },
+                            selectedContentColor = BiliPink,
+                            unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
                 }
-            )
-        }
-
-        item {
-            HorizontalDivider(
-                modifier = Modifier.padding(horizontal = 16.dp),
-                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)
-            )
-        }
-
-        item { DescriptionSection(desc = info.desc) }
-
-        item {
-            Spacer(Modifier.height(8.dp))
-            HorizontalDivider(thickness = 8.dp, color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
-        }
-
-        item { RelatedVideosHeader() }
-
-        items(relatedVideos, key = { it.bvid }) { video ->
-            RelatedVideoItem(video = video, onClick = { onRelatedVideoClick(video.bvid) })
-        }
-
-        item {
-            Spacer(Modifier.height(8.dp))
-            HorizontalDivider(thickness = 8.dp, color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
-        }
-
-        item { ReplyHeader(count = replyCount) }
-
-        if (replies.isEmpty() && replyCount > 0 && isRepliesLoading) {
-            item {
-                Box(modifier = Modifier.fillMaxWidth().padding(64.dp), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
-                }
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.2f))
             }
-        } else {
-            items(replies, key = { it.rpid }) { reply ->
-                ReplyItemView(
-                    item = reply,
-                    emoteMap = emoteMap,
-                    onClick = { },
-                    onSubClick = { onSubReplyClick(reply) } // 🔥 Open sub-reply
+        }
+
+        // 4. Tab 内容
+        if (selectedTabIndex == 0) {
+            // === 简介 Tab 内容 ===
+
+            // UP主信息
+            item {
+                UpInfoSection(
+                    info = info,
+                    isFollowing = isFollowing,
+                    onFollowClick = onFollowClick,
+                    onUpClick = onUpClick
                 )
             }
 
-            // 如果还有更多评论
-            if (replies.size < replyCount) {
+            item {
+                HorizontalDivider(
+                    modifier = Modifier.padding(horizontal = 16.dp),
+                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)
+                )
+            }
+
+            // 视频简介
+            item { DescriptionSection(desc = info.desc) }
+
+            // 分P选择器 (仅多P视频显示)
+            if (info.pages.size > 1) {
+                item {
+                    PagesSelector(
+                        pages = info.pages,
+                        currentPageIndex = currentPageIndex,
+                        onPageSelect = onPageSelect
+                    )
+                }
+            }
+
+
+            // 相关视频推荐
+            item { 
+                Spacer(Modifier.height(8.dp))
+                VideoRecommendationHeader() 
+            }
+
+            items(relatedVideos, key = { it.bvid }) { video ->
+                RelatedVideoItem(video = video, onClick = { onRelatedVideoClick(video.bvid) })
+            }
+            
+        } else {
+            // === 评论 Tab 内容 ===
+            item { ReplyHeader(count = replyCount) }
+            
+            if (isRepliesLoading && replies.isEmpty()) {
+                item {
+                    Box(modifier = Modifier.fillMaxWidth().height(200.dp), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator(color = BiliPink)
+                    }
+                }
+            } else if (replies.isEmpty()) {
+                item {
+                    Box(modifier = Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
+                        Text("暂无评论", color = Color.Gray)
+                    }
+                }
+            } else {
+                items(items = replies, key = { it.rpid }) { reply ->
+                    ReplyItemView(
+                        item = reply,
+                        emoteMap = emoteMap,
+                        onClick = {},
+                        onSubClick = { onSubReplyClick(reply) }
+                    )
+                }
+                
+                // 加载更多提示
                 item {
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clickable { onLoadMoreReplies() }
                             .padding(16.dp),
                         contentAlignment = Alignment.Center
                     ) {
-                        if (isRepliesLoading) {
-                            CircularProgressIndicator(modifier = Modifier.size(20.dp), color = MaterialTheme.colorScheme.primary, strokeWidth = 2.dp)
+                        if (replies.size < replyCount) {
+                             LaunchedEffect(Unit) { onLoadMoreReplies() }
+                             CircularProgressIndicator(modifier = Modifier.size(24.dp), color = BiliPink)
                         } else {
-                            Text("加载更多评论", color = MaterialTheme.colorScheme.primary)
+                             Text("—— end ——", color = Color.Gray, fontSize = 12.sp)
                         }
                     }
                 }
-            } else if (replies.isNotEmpty()) {
-                 item {
-                    Box(modifier = Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
-                         Text("—— end ——", color = Color.Gray, fontSize = 12.sp)
-                    }
-                 }
-            }
+    }
         }
+    }
+}
+
+// 辅助组件：推荐视频标题
+@Composable
+private fun VideoRecommendationHeader() {
+    Row(
+        modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = "相关推荐",
+            fontSize = 15.sp,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onSurface
+        )
     }
 }

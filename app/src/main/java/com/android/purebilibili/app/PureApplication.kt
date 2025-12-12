@@ -7,15 +7,34 @@ import android.app.NotificationManager
 import android.content.Context
 import android.os.Build
 import com.android.purebilibili.core.network.NetworkModule
+import com.android.purebilibili.core.network.WbiKeyManager
 import com.android.purebilibili.core.store.TokenManager
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 
 class PureApplication : Application() {
+    
     override fun onCreate() {
         super.onCreate()
         // 初始化网络模块上下文
         NetworkModule.init(this)
         // 初始化 Token 管理
         TokenManager.init(this)
+        
+        // 🔥🔥 [新增] 恢复 WBI 密钥缓存
+        WbiKeyManager.restoreFromStorage(this)
+        
+        // 🔥🔥 [优化] 异步预热 WBI Keys，减少首次视频加载延迟
+        CoroutineScope(Dispatchers.IO + SupervisorJob()).launch {
+            try {
+                WbiKeyManager.getWbiKeys()
+                android.util.Log.d("PureApplication", "✅ WBI Keys preloaded successfully")
+            } catch (e: Exception) {
+                android.util.Log.w("PureApplication", "⚠️ WBI Keys preload failed: ${e.message}")
+            }
+        }
 
         // 🔥🔥🔥 核心修复：手动创建媒体通知渠道
         // 即使 Media3 会尝试自动创建，手动创建是确保通知显示的最后一道防线

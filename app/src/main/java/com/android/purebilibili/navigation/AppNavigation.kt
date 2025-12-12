@@ -79,7 +79,11 @@ fun AppNavigation(
                 onAvatarClick = { navController.navigate(ScreenRoutes.Login.route) },
                 onProfileClick = { navController.navigate(ScreenRoutes.Profile.route) },
                 onSettingsClick = { navController.navigate(ScreenRoutes.Settings.route) },
-                onDynamicClick = { navController.navigate(ScreenRoutes.Dynamic.route) }
+                onDynamicClick = { navController.navigate(ScreenRoutes.Dynamic.route) },
+                onHistoryClick = { navController.navigate(ScreenRoutes.History.route) },
+                onLiveClick = { roomId, title, uname ->
+                    navController.navigate(ScreenRoutes.Live.createRoute(roomId, title, uname))
+                }
             )
         }
 
@@ -110,6 +114,7 @@ fun AppNavigation(
             VideoDetailScreen(
                 bvid = bvid,
                 coverUrl = coverUrl,
+                onUpClick = { mid -> navController.navigate(ScreenRoutes.Space.createRoute(mid)) },  // 🔥 点击UP跳转空间
                 miniPlayerManager = miniPlayerManager,
                 isInPipMode = isInPipMode,
                 isVisible = true,
@@ -147,6 +152,12 @@ fun AppNavigation(
             popExitTransition = { slideOutOfContainer(AnimatedContentTransitionScope.SlideDirection.Right, tween(animDuration)) }
         ) {
             val historyViewModel: HistoryViewModel = viewModel()
+            
+            // 🔥🔥 [修复] 每次进入历史记录页面时刷新数据
+            androidx.compose.runtime.LaunchedEffect(Unit) {
+                historyViewModel.loadData()
+            }
+            
             CommonListScreen(
                 viewModel = historyViewModel,
                 onBack = { navController.popBackStack() },
@@ -176,7 +187,7 @@ fun AppNavigation(
         ) {
             DynamicScreen(
                 onVideoClick = { bvid -> navigateToVideo(bvid, 0L, "") },
-                onUserClick = { /* TODO: 跳转用户空间 */ },
+                onUserClick = { mid -> navController.navigate(ScreenRoutes.Space.createRoute(mid)) },
                 onBack = { navController.popBackStack() }
             )
         }
@@ -213,7 +224,10 @@ fun AppNavigation(
             enterTransition = { slideIntoContainer(AnimatedContentTransitionScope.SlideDirection.Left, tween(animDuration)) },
             popExitTransition = { slideOutOfContainer(AnimatedContentTransitionScope.SlideDirection.Right, tween(animDuration)) }
         ) {
-            SettingsScreen(onBack = { navController.popBackStack() })
+            SettingsScreen(
+                onBack = { navController.popBackStack() },
+                onOpenSourceLicensesClick = { navController.navigate(ScreenRoutes.OpenSourceLicenses.route) }
+            )
         }
 
         composable(
@@ -227,6 +241,56 @@ fun AppNavigation(
                     navController.popBackStack()
                     homeViewModel.refresh()
                 }
+            )
+        }
+
+        // --- 8. 开源许可证 ---
+        composable(
+            route = ScreenRoutes.OpenSourceLicenses.route,
+            enterTransition = { slideIntoContainer(AnimatedContentTransitionScope.SlideDirection.Left, tween(animDuration)) },
+            popExitTransition = { slideOutOfContainer(AnimatedContentTransitionScope.SlideDirection.Right, tween(animDuration)) }
+        ) {
+            com.android.purebilibili.feature.settings.OpenSourceLicensesScreen(
+                onBack = { navController.popBackStack() }
+            )
+        }
+        
+        // --- 9. 🔥🔥 [新增] UP主空间页面 ---
+        composable(
+            route = ScreenRoutes.Space.route,
+            arguments = listOf(
+                navArgument("mid") { type = NavType.LongType }
+            ),
+            enterTransition = { slideIntoContainer(AnimatedContentTransitionScope.SlideDirection.Left, tween(animDuration)) },
+            popExitTransition = { slideOutOfContainer(AnimatedContentTransitionScope.SlideDirection.Right, tween(animDuration)) }
+        ) { backStackEntry ->
+            val mid = backStackEntry.arguments?.getLong("mid") ?: 0L
+            com.android.purebilibili.feature.space.SpaceScreen(
+                mid = mid,
+                onBack = { navController.popBackStack() },
+                onVideoClick = { bvid -> navigateToVideo(bvid, 0L, "") }
+            )
+        }
+        
+        // --- 10. 🔥🔥 [新增] 直播播放页面 ---
+        composable(
+            route = ScreenRoutes.Live.route,
+            arguments = listOf(
+                navArgument("roomId") { type = NavType.LongType },
+                navArgument("title") { type = NavType.StringType; defaultValue = "" },
+                navArgument("uname") { type = NavType.StringType; defaultValue = "" }
+            ),
+            enterTransition = { slideIntoContainer(AnimatedContentTransitionScope.SlideDirection.Up, tween(animDuration)) },
+            popExitTransition = { slideOutOfContainer(AnimatedContentTransitionScope.SlideDirection.Down, tween(animDuration)) }
+        ) { backStackEntry ->
+            val roomId = backStackEntry.arguments?.getLong("roomId") ?: 0L
+            val title = backStackEntry.arguments?.getString("title") ?: ""
+            val uname = backStackEntry.arguments?.getString("uname") ?: ""
+            com.android.purebilibili.feature.live.LivePlayerScreen(
+                roomId = roomId,
+                title = Uri.decode(title),
+                uname = Uri.decode(uname),
+                onBack = { navController.popBackStack() }
             )
         }
     }

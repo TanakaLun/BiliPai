@@ -52,7 +52,9 @@ enum class DisplayMode(val title: String, val value: Int) {
 @Composable
 fun SettingsScreen(
     viewModel: SettingsViewModel = viewModel(),
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    // 🔥 新增跳转回调
+    onOpenSourceLicensesClick: () -> Unit
 ) {
     val context = LocalContext.current
     val uriHandler = LocalUriHandler.current
@@ -62,7 +64,7 @@ fun SettingsScreen(
 
     var displayModeInt by remember { mutableIntStateOf(prefs.getInt("display_mode", 0)) }
     var isStatsEnabled by remember { mutableStateOf(prefs.getBoolean("show_stats", false)) }
-    var danmakuScale by remember { mutableFloatStateOf(prefs.getFloat("danmaku_scale", 1.0f)) }
+
 
     var showModeDialog by remember { mutableStateOf(false) }
     var showCacheDialog by remember { mutableStateOf(false) }
@@ -269,15 +271,7 @@ fun SettingsScreen(
             item {
                 SettingsGroup {
                     SettingClickableItem(
-                        icon = Icons.Outlined.Code,
-                        title = "开源主页",
-                        value = "GitHub",
-                        onClick = { uriHandler.openUri(GITHUB_URL) },
-                        iconTint = Color(0xFF7E57C2) // Deep Purple
-                    )
-                    Divider()
-                    SettingClickableItem(
-                        icon = ImageVector.vectorResource(com.android.purebilibili.R.drawable.ic_telegram_logo),
+                        iconPainter = androidx.compose.ui.res.painterResource(com.android.purebilibili.R.drawable.ic_telegram_logo),
                         title = "Telegram 频道",
                         value = "@BiliPai",
                         onClick = { uriHandler.openUri("https://t.me/BiliPai") },
@@ -305,84 +299,18 @@ fun SettingsScreen(
                         iconTint = Color(0xFF5C6BC0) // Indigo
                     )
                     Divider()
-
-                    // 🔥🔥 [新增] App 图标切换
-                    val currentIcon by viewModel.currentIcon.collectAsState()
-                    // 动态获取资源 ID (需要 context)
-                        val iconOptions = remember {
-                        listOf(
-                            Triple(".MainActivityDefault", "默认 (蓝)", com.android.purebilibili.R.mipmap.ic_launcher),
-                            Triple(".MainActivityMinimalist", "粉色极简", com.android.purebilibili.R.mipmap.ic_launcher_minimalist),
-                            Triple(".MainActivityGlass", "毛玻璃", com.android.purebilibili.R.mipmap.ic_launcher_glass),
-                            Triple(".MainActivityMascot", "Q版吉祥物", com.android.purebilibili.R.mipmap.ic_launcher_mascot),
-                            Triple(".MainActivityAbstract", "几何抽象", com.android.purebilibili.R.mipmap.ic_launcher_abstract),
-                        )
-                    }
-
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Text(
-                            text = "应用图标", 
-                            style = MaterialTheme.typography.bodyLarge, 
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                        Spacer(modifier = Modifier.height(12.dp))
-                        
-                        androidx.compose.foundation.lazy.LazyRow(
-                            horizontalArrangement = Arrangement.spacedBy(16.dp)
-                        ) {
-                            items(iconOptions.size) { index ->
-                                val (alias, name, resId) = iconOptions[index]
-                                val isSelected = currentIcon == alias
-                                
-                                Column(
-                                    horizontalAlignment = Alignment.CenterHorizontally,
-                                    modifier = Modifier
-                                        .width(72.dp)
-                                        .clickable { 
-                                            // 提示用户可能重启
-                                            Toast.makeText(context, "正在切换图标，应用可能会重启...", Toast.LENGTH_SHORT).show()
-                                            viewModel.changeAppIcon(alias) 
-                                        }
-                                ) {
-                                    Box(
-                                        contentAlignment = Alignment.BottomEnd
-                                    ) {
-                                        AsyncImage(
-                                            model = resId,
-                                            contentDescription = name,
-                                            modifier = Modifier
-                                                .size(64.dp)
-                                                .clip(RoundedCornerShape(14.dp))
-                                                .then(
-                                                    if (isSelected) Modifier.border(2.dp, BiliPink, RoundedCornerShape(14.dp))
-                                                    else Modifier
-                                                )
-                                        )
-                                        if (isSelected) {
-                                            Icon(
-                                                imageVector = Icons.Filled.CheckCircle,
-                                                contentDescription = null,
-                                                tint = BiliPink,
-                                                modifier = Modifier
-                                                    .size(20.dp)
-                                                    .background(Color.White, androidx.compose.foundation.shape.CircleShape)
-                                            )
-                                        }
-                                    }
-                                    Spacer(modifier = Modifier.height(8.dp))
-                                    Text(
-                                        text = name,
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = if (isSelected) BiliPink else MaterialTheme.colorScheme.onSurfaceVariant,
-                                        maxLines = 1,
-                                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
-                                    )
-                                }
-                            }
-                        }
-                    }
                     
+                    SettingSwitchItem(
+                        icon = Icons.Outlined.ViewStream,
+                        title = "悬浮底栏",
+                        subtitle = "关闭后底栏将沉浸式贴底显示",
+                        checked = state.isBottomBarFloating,
+                        onCheckedChange = { viewModel.toggleBottomBarFloating(it) },
+                        iconTint = Color(0xFF26C6DA) // Cyan
+                    )
                     Divider()
+
+
 
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                         SettingSwitchItem(
@@ -395,6 +323,111 @@ fun SettingsScreen(
                         )
                         Divider()
                     }
+
+                    // 🔥🔥 [新增] 应用图标选择器
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            // 使用简单的 Apps 图标
+                            Icon(
+                                Icons.Outlined.Apps,
+                                contentDescription = null,
+                                tint = Color(0xFF9C27B0),
+                                modifier = Modifier.size(24.dp)
+                            )
+                            Spacer(modifier = Modifier.width(16.dp))
+                            Column {
+                                Text(
+                                    text = "应用图标",
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Text(
+                                    text = "切换个性化启动图标",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(12.dp))
+                        
+                        // 图标数据类
+                        data class IconOption(val key: String, val name: String, val desc: String)
+                        val iconOptions = listOf(
+                            IconOption("3D", "3D立体", "默认"),
+                            IconOption("Blue", "经典蓝", "原版"),
+                            IconOption("Retro", "复古怀旧", "80年代"),
+                            IconOption("Flat", "扁平现代", "Material"),
+                            IconOption("Neon", "霜虹发光", "赛博朋克")
+                        )
+                        
+                        androidx.compose.foundation.lazy.LazyRow(
+                            horizontalArrangement = Arrangement.spacedBy(16.dp),
+                            contentPadding = PaddingValues(horizontal = 4.dp) // 微调 padding
+                        ) {
+                            items(iconOptions.size) { index ->
+                                val option = iconOptions[index]
+                                val isSelected = state.appIcon == option.key
+                                
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(56.dp)
+                                            .clip(RoundedCornerShape(14.dp)) // iOS 风格圆角
+                                            .clickable { 
+                                                if (!isSelected) {
+                                                    Toast.makeText(context, "正在切换图标...", Toast.LENGTH_SHORT).show()
+                                                    viewModel.setAppIcon(option.key)
+                                                }
+                                            },
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        // 真实应用图标
+                                        val iconRes = when(option.key) {
+                                            "3D" -> com.android.purebilibili.R.mipmap.ic_launcher_3d
+                                            "Blue" -> com.android.purebilibili.R.mipmap.ic_launcher_blue
+                                            "Retro" -> com.android.purebilibili.R.mipmap.ic_launcher_retro
+                                            "Flat" -> com.android.purebilibili.R.mipmap.ic_launcher_flat
+                                            "Neon" -> com.android.purebilibili.R.mipmap.ic_launcher_neon
+                                            else -> com.android.purebilibili.R.mipmap.ic_launcher
+                                        }
+                                        AsyncImage(
+                                            model = iconRes,
+                                            contentDescription = option.name,
+                                            modifier = Modifier.size(48.dp)
+                                        )
+                                        
+                                        if (isSelected) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .matchParentSize()
+                                                    .background(Color.Black.copy(alpha = 0.3f))
+                                            )
+                                            Icon(
+                                                Icons.Filled.CheckCircle,
+                                                contentDescription = null,
+                                                tint = Color.White,
+                                                modifier = Modifier.size(24.dp)
+                                            )
+                                        }
+                                    }
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Text(
+                                        text = option.name,
+                                        style = MaterialTheme.typography.labelMedium,
+                                        color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                                        fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal
+                                    )
+                                    Text(
+                                        text = option.desc,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    Divider()
 
                     // 🔥🔥 [新增] 主题色选择器
                     Column(modifier = Modifier.padding(16.dp)) {
@@ -587,24 +620,6 @@ fun SettingsScreen(
                 }
             }
 
-            // ... (弹幕设置和高级选项部分代码与之前一致，保持不变)
-            item { SettingsSectionTitle("弹幕设置") }
-            item {
-                SettingsGroup {
-                    SettingClickableItem(
-                        icon = Icons.Outlined.FormatSize,
-                        title = "弹幕字号缩放",
-                        value = "${(danmakuScale * 100).toInt()}%",
-                        onClick = {
-                            val newScale = if (danmakuScale >= 1.5f) 0.5f else danmakuScale + 0.25f
-                            danmakuScale = newScale
-                            prefs.edit().putFloat("danmaku_scale", newScale).apply()
-                            Toast.makeText(context, "字号已调整", Toast.LENGTH_SHORT).show()
-                        },
-                        iconTint = Color(0xFFFF7043) // Deep Orange
-                    )
-                }
-            }
 
             item { SettingsSectionTitle("高级选项") }
             item {
@@ -615,6 +630,14 @@ fun SettingsScreen(
                         value = state.cacheSize,
                         onClick = { showCacheDialog = true },
                         iconTint = Color(0xFFEF5350) // Red
+                    )
+                    Divider()
+                    SettingClickableItem(
+                        icon = Icons.Outlined.Description,
+                        title = "开源许可证",
+                        value = "License",
+                        onClick = onOpenSourceLicensesClick,
+                        iconTint = Color(0xFFFFA726)
                     )
                     Divider()
                     SettingClickableItem(
@@ -718,6 +741,7 @@ fun SettingSwitchItem(
 @Composable
 fun SettingClickableItem(
     icon: ImageVector? = null,
+    iconPainter: androidx.compose.ui.graphics.painter.Painter? = null,
     title: String,
     value: String? = null,
     onClick: (() -> Unit)? = null,
@@ -731,7 +755,7 @@ fun SettingClickableItem(
             .padding(horizontal = 16.dp, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        if (icon != null) {
+        if (icon != null || iconPainter != null) {
             if (iconTint != Color.Unspecified) {
                 // 🔥 彩色圆形背景图标
                 Box(
@@ -741,7 +765,11 @@ fun SettingClickableItem(
                         .background(iconTint.copy(alpha = 0.12f)),
                     contentAlignment = Alignment.Center
                 ) {
-                    Icon(icon, contentDescription = null, tint = iconTint, modifier = Modifier.size(20.dp))
+                    if (icon != null) {
+                        Icon(icon, contentDescription = null, tint = iconTint, modifier = Modifier.size(20.dp))
+                    } else if (iconPainter != null) {
+                        Icon(painter = iconPainter, contentDescription = null, tint = iconTint, modifier = Modifier.size(20.dp))
+                    }
                 }
             } else {
                 // 🔥 使用图标原始颜色（无背景容器）
@@ -749,7 +777,11 @@ fun SettingClickableItem(
                     modifier = Modifier.size(36.dp),
                     contentAlignment = Alignment.Center
                 ) {
-                    Icon(icon, contentDescription = null, tint = Color.Unspecified, modifier = Modifier.size(36.dp))
+                    if (icon != null) {
+                        Icon(icon, contentDescription = null, tint = Color.Unspecified, modifier = Modifier.size(36.dp))
+                    } else if (iconPainter != null) {
+                        Icon(painter = iconPainter, contentDescription = null, tint = Color.Unspecified, modifier = Modifier.size(36.dp))
+                    }
                 }
             }
             Spacer(modifier = Modifier.width(14.dp))

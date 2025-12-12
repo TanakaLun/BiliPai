@@ -276,3 +276,243 @@ data class RecommendStat(
     val like: Long = 0,
     val danmaku: Long = 0
 )
+
+// --- 6. 热门视频 Response (字段结构不同于推荐) ---
+@Serializable
+data class PopularResponse(
+    val code: Int = 0,
+    val message: String = "",
+    val data: PopularData? = null
+)
+
+@Serializable
+data class PopularData(
+    val list: List<PopularItem>? = null,
+    val no_more: Boolean = false
+)
+
+@Serializable
+data class PopularItem(
+    val bvid: String = "",
+    val cid: Long = 0,
+    val pic: String = "",
+    val title: String = "",
+    val duration: Int = 0,
+    val pubdate: Long = 0,
+    val owner: Owner = Owner(),
+    val stat: PopularStat = PopularStat()
+) {
+    fun toVideoItem(): VideoItem {
+        return VideoItem(
+            id = cid,
+            bvid = bvid,
+            title = title,
+            pic = pic,
+            owner = owner,
+            stat = Stat(view = stat.view, like = stat.like, danmaku = stat.danmaku),
+            duration = duration
+        )
+    }
+}
+
+@Serializable
+data class PopularStat(
+    val view: Int = 0,
+    val like: Int = 0,
+    val danmaku: Int = 0,
+    val reply: Int = 0,
+    val coin: Int = 0,
+    val favorite: Int = 0,
+    val share: Int = 0
+)
+
+// --- 7. 直播列表 Response ---
+@Serializable
+data class LiveResponse(
+    val code: Int = 0,
+    val message: String = "",
+    val data: LiveData? = null
+)
+
+@Serializable
+data class LiveData(
+    val list: List<LiveRoom>? = null,
+    val count: Int = 0,
+    val has_more: Int = 0
+)
+
+@Serializable
+data class LiveRoom(
+    val roomid: Long = 0,
+    val uid: Long = 0,
+    val title: String = "",
+    val uname: String = "",
+    val face: String = "",
+    val cover: String = "",
+    @SerialName("user_cover") val userCover: String = "",
+    val online: Int = 0,
+    @SerialName("area_name") val areaName: String = "",
+    @SerialName("parent_name") val parentName: String = "",
+    val keyframe: String = ""  // 关键帧图片
+)
+
+// --- 8. 直播播放 URL Response (兼容新旧 API) ---
+@Serializable
+data class LivePlayUrlResponse(
+    val code: Int = 0,
+    val message: String = "",
+    val data: LivePlayUrlData? = null
+)
+
+@Serializable
+data class LivePlayUrlData(
+    // 旧 API 字段
+    val durl: List<LiveDurl>? = null,
+    val quality_description: List<LiveQuality>? = null,
+    val current_quality: Int = 0,
+    // 🔥 新 xlive API 字段
+    val playurl_info: PlayurlInfo? = null
+)
+
+@Serializable
+data class PlayurlInfo(
+    val playurl: Playurl? = null
+)
+
+@Serializable
+data class Playurl(
+    val stream: List<StreamInfo>? = null
+)
+
+@Serializable
+data class StreamInfo(
+    @SerialName("protocol_name") val protocolName: String = "",
+    val format: List<FormatInfo>? = null
+)
+
+@Serializable
+data class FormatInfo(
+    @SerialName("format_name") val formatName: String = "",
+    val codec: List<CodecInfo>? = null
+)
+
+@Serializable
+data class CodecInfo(
+    @SerialName("codec_name") val codecName: String = "",
+    @SerialName("base_url") val baseUrl: String = "",
+    val url_info: List<UrlInfo>? = null
+)
+
+@Serializable
+data class UrlInfo(
+    val host: String = "",
+    val extra: String = ""
+)
+
+@Serializable
+data class LiveDurl(
+    val url: String = "",
+    val order: Int = 0
+)
+
+@Serializable
+data class LiveQuality(
+    val qn: Int = 0,
+    val desc: String = ""
+)
+@Serializable
+data class FollowedLiveResponse(
+    val code: Int = 0,
+    val message: String = "",
+    val data: FollowedLiveData? = null
+)
+
+@Serializable
+data class FollowedLiveData(
+    val list: List<FollowedLiveRoom>? = null,
+    @SerialName("living_num") val livingNum: Int = 0,
+    @SerialName("not_living_num") val notLivingNum: Int = 0,
+    val pageinfo: PageInfo? = null
+)
+
+@Serializable
+data class PageInfo(
+    val page: Int = 0,
+    val page_size: Int = 0,
+    val total_page: Int = 0
+)
+
+// 🔥🔥 [新增] 直播间详情响应（用于获取在线人数）
+@Serializable
+data class RoomInfoResponse(
+    val code: Int = 0,
+    val message: String = "",
+    val data: RoomInfoData? = null
+)
+
+@Serializable
+data class RoomInfoData(
+    val room_id: Long = 0,
+    val uid: Long = 0,
+    val title: String = "",
+    val online: Int = 0,  // 🔥 在线人数
+    val attention: Int = 0,  // 关注数
+    @SerialName("live_status") val liveStatus: Int = 0,
+    @SerialName("area_name") val areaName: String = ""
+)
+
+@Serializable
+data class WatchedShow(
+    val switch: Boolean = false,
+    val num: Int = 0,
+    @SerialName("text_small") val textSmall: String = "",
+    @SerialName("text_large") val textLarge: String = ""
+)
+
+@Serializable
+data class FollowedLiveRoom(
+    val roomid: Long = 0,
+    val uid: Long = 0,
+    val title: String = "",
+    val uname: String = "",
+    val face: String = "",
+    val cover: String = "",  // 🔥 新增：有些 API 直接返回 cover
+    @SerialName("room_cover") val roomCover: String = "",
+    @SerialName("user_cover") val userCover: String = "",
+    @SerialName("system_cover") val systemCover: String = "",
+    val online: Int = 0,
+    val popularity: Int = 0,
+    val attention: Long = 0,
+    @SerialName("watched_show") val watchedShow: WatchedShow? = null, // 🔥 新增：可能是 watched_show
+    @SerialName("area_name") val areaName: String = "",
+    @SerialName("live_status") val liveStatus: Int = 0,  // 1=直播中
+    @SerialName("live_time") val liveTime: Long = 0
+) {
+    // 🔥 转换为 LiveRoom（统一格式）
+    fun toLiveRoom(): LiveRoom {
+        // 🔥 尝试多个封面来源
+        val validCover = listOf(cover, roomCover, userCover, systemCover, face)
+            .firstOrNull { it.isNotEmpty() } ?: ""
+            
+        // 🔥 优先使用 popularity，其次 watched_show，最后 online
+        val validOnline = when {
+            popularity > 0 -> popularity
+            attention > 0 -> attention.toInt()
+            watchedShow?.num != null && watchedShow.num > 0 -> watchedShow.num
+            else -> online
+        }
+        
+        return LiveRoom(
+            roomid = roomid,
+            uid = uid,
+            title = title,
+            uname = uname,
+            face = face,
+            cover = validCover,
+            userCover = userCover.ifEmpty { validCover },
+            online = validOnline,
+            areaName = areaName,
+            keyframe = validCover  // 🔥 使用相同封面作为 keyframe 后备
+        )
+    }
+}

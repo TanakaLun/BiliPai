@@ -64,3 +64,36 @@ fun ErrorState(message: String, onRetry: () -> Unit) {
         }
     }
 }
+
+// ==========================================
+// 直播子分类组件
+// ==========================================
+
+/**
+ * 🔥 直播子分类行（关注/热门切换）
+ */
+@Composable
+fun LiveSubCategoryRow(
+    selectedSubCategory: LiveSubCategory,
+    onSubCategorySelected: (LiveSubCategory) -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        LiveSubCategory.entries.forEach { subCategory ->
+            val isSelected = selectedSubCategory == subCategory
+            FilterChip(
+                selected = isSelected,
+                onClick = { onSubCategorySelected(subCategory) },
+                label = { Text(subCategory.label) },
+                colors = FilterChipDefaults.filterChipColors(
+                    selectedContainerColor = BiliPink,
+                    selectedLabelColor = androidx.compose.ui.graphics.Color.White
+                )
+            )
+        }
+    }
+}
