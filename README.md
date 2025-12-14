@@ -8,6 +8,7 @@
   <img src="https://img.shields.io/badge/UI-Jetpack%20Compose-blue.svg" alt="Compose">
   <img src="https://img.shields.io/badge/Material-You%20(M3)-green.svg" alt="Material You">
   <img src="https://img.shields.io/badge/Platform-Android%2010+-brightgreen.svg" alt="Android">
+  <img src="https://img.shields.io/badge/APK%20Size-14MB-orange.svg" alt="Size">
   <img src="https://img.shields.io/badge/License-GPL--3.0-blue.svg" alt="License">
 </p>
 
@@ -58,11 +59,28 @@
 | **倍速播放** | 0.5x ~ 2.0x 倍速切换 |
 | **画中画** | 悬浮小窗播放，多任务无缝切换 |
 
+### 📺 番剧追番
+
+| 功能 | 描述 |
+|------|------|
+| **番剧首页** | 热门推荐、新番时间表、分类浏览 |
+| **番剧详情** | 评分、简介、相关季度、追番功能 |
+| **官方风格选集** | 底部弹出面板、季度切换、分页选择、跳转功能 |
+| **番剧播放** | 支持弹幕、手势控制、自动下一集 |
+
+### 📡 直播功能
+
+| 功能 | 描述 |
+|------|------|
+| **直播首页** | 热门直播、分区列表 |
+| **直播播放** | HLS 流媒体、清晰度切换、弹幕显示 |
+
 ### 🎨 现代化 UI
 
 | 功能 | 描述 |
 |------|------|
 | **Material You** | 完整支持 Material Design 3，动态主题色 |
+| **iOS 风格底栏** | 毛玻璃效果、动态取色、滑动切换 |
 | **深色模式** | 完美适配系统深色/浅色主题 |
 | **Lottie 动画** | 点赞、投币、收藏等丝滑反馈动画 |
 | **骨架屏** | Shimmer 效果的优雅加载占位 |
@@ -83,6 +101,7 @@
 - **视频详情**：完整的视频信息、UP主信息、相关推荐
 - **评论系统**：支持楼中楼回复、表情解析
 - **动态页面**：关注 UP 主的动态流
+- **分区浏览**：全站分区视频浏览
 
 ### 🔐 账户功能
 
@@ -125,12 +144,14 @@
 | **依赖注入** | Manual DI (Repository Pattern) |
 | **网络请求** | Retrofit + OkHttp + Kotlinx Serialization |
 | **图片加载** | Coil Compose |
-| **视频播放** | ExoPlayer (Media3) + DASH |
-| **弹幕引擎** | DanmakuFlameMaster |
+| **视频播放** | ExoPlayer (Media3) + DASH + HLS |
+| **弹幕引擎** | DanmakuFlameMaster + ByteDance DanmakuRenderEngine |
 | **动画库** | Lottie Compose |
 | **本地存储** | Room (历史记录) + DataStore (设置) |
 | **异步处理** | Kotlin Coroutines + Flow |
 | **导航** | Jetpack Navigation Compose |
+| **毛玻璃效果** | Haze |
+| **代码压缩** | R8 Proguard (APK 仅 14MB) |
 
 ---
 
@@ -140,10 +161,13 @@
 
 前往 [Releases](https://github.com/jay3-yy/BiliPai/releases) 页面下载最新版本 APK。
 
+> **注意**: 当前仅提供 **arm64-v8a** (64位) 版本，支持绝大多数现代 Android 手机。
+
 ### 系统要求
 
 - Android 10.0 (API 29) 及以上
 - 推荐 Android 12+ 以获得完整 Material You 体验
+- 64 位处理器 (arm64-v8a)
 
 ### 从源码构建
 
@@ -154,11 +178,11 @@ git clone https://github.com/jay3-yy/BiliPai.git
 # 进入目录
 cd BiliPai
 
-# 构建 Debug 版本
-./gradlew assembleDebug
+# 构建 Release 版本 (启用 R8 压缩)
+./gradlew assembleRelease
 
 # APK 位置
-# app/build/outputs/apk/debug/app-debug.apk
+# app/build/outputs/apk/release/app-release.apk
 ```
 
 ---
@@ -179,6 +203,11 @@ cd BiliPai
 - [x] 倍速播放
 - [x] Material You 主题
 - [x] 深色模式
+- [x] **番剧功能** (详情、追番、播放)
+- [x] **直播功能** (HLS 流媒体)
+- [x] **官方风格选集面板** (底部弹出、季度切换、分页)
+- [x] **iOS 风格 UI** (毛玻璃底栏、动态取色)
+- [x] **APK 体积优化** (R8 压缩，仅 14MB)
 
 ### 🚧 进行中
 
@@ -187,10 +216,9 @@ cd BiliPai
 
 ### 📋 计划中
 
-- [ ] 番剧/影视支持
-- [ ] 直播功能
 - [ ] 平板/折叠屏适配
 - [ ] 观看历史云同步
+- [ ] 投稿功能
 
 ---
 
@@ -206,6 +234,7 @@ cd BiliPai
 | [Retrofit](https://github.com/square/retrofit) | 类型安全的 HTTP 客户端 |
 | [Coil](https://github.com/coil-kt/coil) | Kotlin 优先的图片加载库 |
 | [Lottie](https://github.com/airbnb/lottie-android) | 精美的矢量动画 |
+| [Haze](https://github.com/chrisbanes/haze) | Compose 毛玻璃效果 |
 | [bilibili-API-collect](https://github.com/SocialSisterYi/bilibili-API-collect) | B 站 API 文档整理 |
 
 ---
