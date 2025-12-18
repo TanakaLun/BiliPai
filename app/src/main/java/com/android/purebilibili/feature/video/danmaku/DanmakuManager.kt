@@ -87,10 +87,10 @@ class DanmakuManager private constructor(
     private var isPrepared = false
     private var isLoading = false  // 🔥 防止重复加载
     
-    // 缓存弹幕数据
-    private var cachedDanmakuData: ByteArray? = null
+    // 🔥🔥 [修复] 缓存原始数据而非解析后的弹幕列表
+    // BaseDanmaku 对象与特定 DanmakuContext 绑定，无法跨 context 使用
+    private var cachedRawData: ByteArray? = null
     private var cachedCid: Long = 0L
-    private var isDanmakuLoaded = false  // 🔥 标记弹幕是否已加载到视图
     
     // 配置
     val config = DanmakuConfig()
@@ -120,15 +120,14 @@ class DanmakuManager private constructor(
         set(value) = config.updateTopMargin(danmakuContext, value)
     
     /**
-     * 初始化弹幕上下文
+     * 获取或创建弹幕上下文（只创建一次，复用）
      */
-    private fun initDanmakuContext() {
-        if (danmakuContext != null) return
-        
-        danmakuContext = DanmakuContext.create().also { ctx ->
+    private fun getOrCreateContext(): DanmakuContext {
+        return danmakuContext ?: DanmakuContext.create().also { ctx ->
             config.applyTo(ctx, context)
+            danmakuContext = ctx
+            Log.d(TAG, "✅ DanmakuContext created (singleton)")
         }
-        Log.d(TAG, "✅ DanmakuContext initialized")
     }
     
     /**
@@ -141,20 +140,58 @@ class DanmakuManager private constructor(
             return
         }
         
-        Log.d(TAG, "📎 attachView: new view, old=${danmakuView != null}")
+        Log.d(TAG, "📎 attachView: new view, old=${danmakuView != null}, hashCode=${view.hashCode()}, cachedRawData=${cachedRawData?.size ?: 0}")
         
-        // 先解绑旧视图
-        detachView()
+        // 先暂停旧视图
+        danmakuView?.let { oldView ->
+            try {
+                oldView.pause()
+                oldView.hide()
+            } catch (e: Exception) {
+                Log.w(TAG, "⚠️ Error pausing old view: ${e.message}")
+            }
+        }
         
         danmakuView = view
-        initDanmakuContext()
+        isPrepared = false  // 🔥 重置 prepared 状态
+        
+        // 🔥🔥 [修复] 每个新视图需要新的 DanmakuContext
+        val ctx = DanmakuContext.create().also { newCtx ->
+            config.applyTo(newCtx, context)
+        }
+        danmakuContext = ctx
+        Log.d(TAG, "✅ New DanmakuContext created for view ${view.hashCode()}")
+        
+        // 🔥🔥 保存原始数据引用，用于在 prepared 回调中解析
+        val rawDataToUse = cachedRawData
         
         view.setCallback(object : DrawHandler.Callback {
             override fun prepared() {
-                Log.d(TAG, "✅ DanmakuView prepared")
+                Log.d(TAG, "✅ DanmakuView prepared, hashCode=${view.hashCode()}, hasRawData=${rawDataToUse != null}")
                 isPrepared = true
+                
+                // 🔥🔥 [修复] prepared 回调可能在后台线程调用，必须切换到主线程
                 android.os.Handler(android.os.Looper.getMainLooper()).post {
-                    player?.let { syncToPosition(it.currentPosition) }
+                    // 🔥🔥 [关键修复] 用新的 context 重新解析弹幕
+                    rawDataToUse?.let { rawData ->
+                        Log.d(TAG, "📎 Reparsing ${rawData.size} bytes with new context")
+                        val danmakuList = DanmakuParser.parse(rawData, ctx)
+                        Log.d(TAG, "📊 Parsed ${danmakuList.size} danmakus for new view")
+                        
+                        // 添加到视图
+                        danmakuList.forEach { view.addDanmaku(it) }
+                        
+                        // 同步到当前位置并启动
+                        player?.let { p ->
+                            val position = p.currentPosition
+                            view.seekTo(position)
+                            if (p.isPlaying && config.isEnabled) {
+                                view.start()
+                                view.resume()
+                                Log.d(TAG, "🚀 Synced to position ${position}ms and started")
+                            }
+                        }
+                    } ?: Log.d(TAG, "📎 No cached raw data to parse")
                 }
             }
             override fun updateTimer(timer: DanmakuTimer?) {}
@@ -164,15 +201,16 @@ class DanmakuManager private constructor(
         
         view.enableDanmakuDrawingCache(true)
         
-        // 如果有缓存数据，立即解析
-        cachedDanmakuData?.let { data ->
-            Log.d(TAG, "📎 Found cached danmaku data (${data.size} bytes), parsing...")
-            parseDanmaku(data)
+        // 🔥 使用空解析器 prepare 视图
+        val emptyParser = object : BaseDanmakuParser() {
+            override fun parse(): IDanmakus = Danmakus()
         }
+        view.prepare(emptyParser, ctx)
+        isReady = true
     }
     
     /**
-     * 解绑 DanmakuView（不释放弹幕数据）
+     * 解绑 DanmakuView（不释放弹幕数据和 Context）
      */
     fun detachView() {
         danmakuView?.let { view ->
@@ -186,7 +224,7 @@ class DanmakuManager private constructor(
         }
         danmakuView = null
         isPrepared = false
-        isDanmakuLoaded = false  // 🔥 重置标记，新视图需要重新加载
+        // 🔥 注意：不清除 danmakuContext 和 cachedDanmakus，保持复用
     }
     
     /**
@@ -202,22 +240,33 @@ class DanmakuManager private constructor(
         
         playerListener = object : Player.Listener {
             override fun onIsPlayingChanged(isPlaying: Boolean) {
-                Log.d(TAG, "🎬 isPlaying=$isPlaying, isPrepared=$isPrepared, isEnabled=${config.isEnabled}")
+                Log.d(TAG, "🎬 onIsPlayingChanged: isPlaying=$isPlaying, isPrepared=$isPrepared, isEnabled=${config.isEnabled}")
                 if (isPlaying && isPrepared && config.isEnabled) {
+                    // 🔥 恢复播放时同步位置并启动弹幕
+                    val position = exoPlayer.currentPosition
+                    danmakuView?.seekTo(position)
                     startDanmaku()
-                } else {
+                } else if (!isPlaying) {
                     danmakuView?.pause()
                 }
             }
             
             override fun onPlaybackStateChanged(playbackState: Int) {
+                Log.d(TAG, "🎬 onPlaybackStateChanged: state=$playbackState, isPlaying=${exoPlayer.isPlaying}")
                 when (playbackState) {
                     Player.STATE_READY -> {
                         if (exoPlayer.isPlaying && isPrepared && config.isEnabled) {
+                            // 🔥 准备好后同步位置并启动
+                            val position = exoPlayer.currentPosition
+                            danmakuView?.seekTo(position)
                             startDanmaku()
                         }
                     }
-                    Player.STATE_ENDED, Player.STATE_BUFFERING -> {
+                    Player.STATE_BUFFERING -> {
+                        // 🔥 Buffering 时不暂停弹幕，只是等待
+                        Log.d(TAG, "🎬 Buffering...")
+                    }
+                    Player.STATE_ENDED -> {
                         danmakuView?.pause()
                     }
                 }
@@ -229,8 +278,16 @@ class DanmakuManager private constructor(
                 reason: Int
             ) {
                 if (reason == Player.DISCONTINUITY_REASON_SEEK) {
-                    Log.d(TAG, "🎬 Seek to ${newPosition.positionMs}ms")
-                    danmakuView?.seekTo(newPosition.positionMs)
+                    Log.d(TAG, "🎬 Seek detected: ${oldPosition.positionMs}ms -> ${newPosition.positionMs}ms")
+                    danmakuView?.let { view ->
+                        // 🔥 清除当前显示的弹幕并跳转到新位置
+                        view.seekTo(newPosition.positionMs)
+                        // 如果正在播放，确保弹幕继续
+                        if (exoPlayer.isPlaying && config.isEnabled) {
+                            view.start()
+                            view.resume()
+                        }
+                    }
                 }
             }
         }
@@ -250,26 +307,20 @@ class DanmakuManager private constructor(
             return
         }
         
-        // 🔥 如果是同一个 cid 且弹幕已加载，不需要重新解析
-        if (cid == cachedCid && isDanmakuLoaded && danmakuView != null) {
-            Log.d(TAG, "📥 Danmaku already loaded for cid=$cid, just sync position")
-            // 只需同步位置
-            player?.let { syncToPosition(it.currentPosition) }
-            return
-        }
-        
-        // 使用缓存数据（新视图绑定时）
-        if (cid == cachedCid && cachedDanmakuData != null && danmakuView != null) {
-            Log.d(TAG, "📥 Using cached danmaku data")
-            scope.launch(Dispatchers.Main) {
-                parseDanmaku(cachedDanmakuData!!)
+        // 🔥 如果是同一个 cid 且已有缓存数据，直接用当前 context 解析
+        if (cid == cachedCid && cachedRawData != null) {
+            Log.d(TAG, "📥 Using cached raw data (${cachedRawData!!.size} bytes)")
+            // 如果视图已准备好，同步位置（弹幕已在 prepared 回调中添加）
+            if (danmakuView != null && isPrepared) {
+                player?.let { syncToPosition(it.currentPosition) }
             }
             return
         }
         
         // 需要从网络加载
         isLoading = true
-        isDanmakuLoaded = false
+        cachedCid = cid
+        cachedRawData = null  // 清除旧缓存
         
         loadJob?.cancel()
         loadJob = scope.launch {
@@ -283,16 +334,35 @@ class DanmakuManager private constructor(
                 
                 Log.d(TAG, "📥 Raw data loaded: ${rawData.size} bytes")
                 
-                cachedDanmakuData = rawData
-                cachedCid = cid
+                // 🔥 缓存原始数据（而非解析后的列表）
+                cachedRawData = rawData
+                
+                // 🔥 用当前 context 解析
+                val ctx = danmakuContext ?: getOrCreateContext()
+                val danmakuList = DanmakuParser.parse(rawData, ctx)
+                Log.d(TAG, "📊 Parsed ${danmakuList.size} danmakus")
                 
                 withContext(Dispatchers.Main) {
-                    if (danmakuView != null) {
-                        parseDanmaku(rawData)
-                    } else {
-                        Log.d(TAG, "📥 View not attached, data cached")
-                    }
                     isLoading = false
+                    
+                    // 如果有视图且已准备好，添加弹幕
+                    danmakuView?.let { view ->
+                        if (isPrepared) {
+                            Log.d(TAG, "📎 Adding ${danmakuList.size} danmakus to current view")
+                            danmakuList.forEach { view.addDanmaku(it) }
+                            
+                            // 同步到当前位置
+                            if (player?.isPlaying == true && config.isEnabled) {
+                                val position = player?.currentPosition ?: 0L
+                                view.seekTo(position)
+                                view.start()
+                                view.resume()
+                                Log.d(TAG, "🚀 Synced to position ${position}ms")
+                            }
+                        } else {
+                            Log.d(TAG, "📥 View not prepared yet, raw data cached for later")
+                        }
+                    } ?: Log.d(TAG, "📥 No view attached, raw data cached")
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "❌ Failed to load danmaku: ${e.message}", e)
@@ -301,71 +371,39 @@ class DanmakuManager private constructor(
         }
     }
     
-    private fun parseDanmaku(rawData: ByteArray) {
-        val view = danmakuView ?: return
-        val ctx = danmakuContext ?: return
-        
-        Log.d(TAG, "🎯 Parsing danmaku...")
-        
-        val startTime = System.currentTimeMillis()
-        
-        // 使用空解析器初始化
-        val emptyParser = object : BaseDanmakuParser() {
-            override fun parse(): IDanmakus = Danmakus()
-        }
-        view.prepare(emptyParser, ctx)
-        isReady = true
-        
-        // 后台解析弹幕
-        scope.launch(Dispatchers.Default) {
-            val danmakuList = DanmakuParser.parse(rawData, ctx)
-            Log.d(TAG, "📊 Parsed ${danmakuList.size} danmakus in ${System.currentTimeMillis() - startTime}ms")
-            
-            withContext(Dispatchers.Main) {
-                // 等待 view 准备好
-                var attempts = 0
-                while (!view.isPrepared && attempts < 10) {
-                    delay(20)
-                    attempts++
-                }
-                
-                if (view.isPrepared && danmakuView === view) {
-                    danmakuList.forEach { view.addDanmaku(it) }
-                    Log.d(TAG, "✅ Added ${danmakuList.size} danmakus")
-                    isDanmakuLoaded = true  // 🔥 标记已加载
-                    
-                    // 同步到当前位置
-                    if (player?.isPlaying == true && config.isEnabled) {
-                        val position = player?.currentPosition ?: 0L
-                        view.seekTo(position)
-                        view.start()
-                        Log.d(TAG, "🚀 Synced to position ${position}ms")
-                    }
-                } else {
-                    Log.w(TAG, "⚠️ View changed or not prepared, skipping add")
-                }
-            }
-        }
-        
-        // 如果正在播放，启动弹幕
-        if (player?.isPlaying == true && config.isEnabled) {
-            view.start()
-        }
-    }
-    
     private fun startDanmaku() {
         val view = danmakuView ?: return
         
-        Log.d(TAG, "🚀 startDanmaku: isReady=$isReady, isPrepared=$isPrepared")
+        val currentPosition = player?.currentPosition ?: 0L
+        Log.d(TAG, "🚀 startDanmaku: pos=${currentPosition}ms, isReady=$isReady, isPrepared=$isPrepared, view.isPaused=${view.isPaused}")
         
         if (isReady && isPrepared) {
-            if (view.visibility != android.view.View.VISIBLE) {
-                view.visibility = android.view.View.VISIBLE
-            }
+            // 🔥 确保视图可见
+            view.visibility = android.view.View.VISIBLE
+            
+            // 🔥🔥 [关键修复] 正确的操作顺序：
+            // 1. show() - 显示弹幕层
+            // 2. start() - 启动计时器
+            // 3. seekTo() - 跳转到正确位置（必须在 start 之后！）
+            // 4. resume() - 恢复渲染
             view.show()
             view.start()
+            view.seekTo(currentPosition)  // 🔥 seekTo 必须在 start 之后！
             view.resume()
-            Log.d(TAG, "✅ Danmaku started")
+            
+            Log.d(TAG, "✅ Danmaku started, view.isPaused=${view.isPaused}")
+            
+            // 🔥 延迟检查可见弹幕数量
+            android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                try {
+                    val visibleDanmakus = view.currentVisibleDanmakus
+                    Log.d(TAG, "📊 Visible danmakus after 500ms: ${visibleDanmakus?.size() ?: 0}, currentTime=${view.currentTime}")
+                } catch (e: Exception) {
+                    Log.w(TAG, "⚠️ Failed to get visible danmakus: ${e.message}")
+                }
+            }, 500)
+        } else {
+            Log.w(TAG, "⚠️ Cannot start: isReady=$isReady, isPrepared=$isPrepared")
         }
     }
     

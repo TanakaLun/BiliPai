@@ -34,6 +34,8 @@ import com.android.purebilibili.core.util.FormatUtils
 import com.android.purebilibili.feature.video.ui.components.QualitySelectionMenu
 import com.android.purebilibili.feature.video.ui.components.SpeedSelectionMenu
 import com.android.purebilibili.feature.video.ui.components.DanmakuSettingsPanel
+import com.android.purebilibili.feature.video.ui.components.VideoAspectRatio
+import com.android.purebilibili.feature.video.ui.components.AspectRatioMenu
 import io.github.alexzhirkevich.cupertino.CupertinoActivityIndicator
 import kotlinx.coroutines.delay
 
@@ -67,12 +69,17 @@ fun VideoPlayerOverlay(
     onDanmakuSpeedChange: (Float) -> Unit = {},
     // 🧪🧪 [实验性功能] 双击点赞
     doubleTapLikeEnabled: Boolean = true,
-    onDoubleTapLike: () -> Unit = {}
+    onDoubleTapLike: () -> Unit = {},
+    // 🔥 视频比例调节
+    currentAspectRatio: VideoAspectRatio = VideoAspectRatio.FIT,
+    onAspectRatioChange: (VideoAspectRatio) -> Unit = {}
 ) {
     var showQualityMenu by remember { mutableStateOf(false) }
     var showSpeedMenu by remember { mutableStateOf(false) }
+    var showRatioMenu by remember { mutableStateOf(false) }
     var showDanmakuSettings by remember { mutableStateOf(false) }
     var currentSpeed by remember { mutableFloatStateOf(1.0f) }
+    // 🔥 使用传入的比例状态
     var isPlaying by remember { mutableStateOf(player.isPlaying) }
     
     // 🧪 双击检测状态
@@ -193,12 +200,14 @@ fun VideoPlayerOverlay(
                     progress = progressState,
                     isFullscreen = isFullscreen,
                     currentSpeed = currentSpeed,
+                    currentRatio = currentAspectRatio,
                     onPlayPauseClick = {
                         if (isPlaying) player.pause() else player.play()
                         isPlaying = !isPlaying
                     },
                     onSeek = { position -> player.seekTo(position) },
                     onSpeedClick = { showSpeedMenu = true },
+                    onRatioClick = { showRatioMenu = true },
                     onToggleFullscreen = onToggleFullscreen,
                     // 🔥🔥 [修复] 传入 modifier 确保在底部
                     modifier = Modifier.align(Alignment.BottomStart)
@@ -304,6 +313,18 @@ fun VideoPlayerOverlay(
                     showSpeedMenu = false
                 },
                 onDismiss = { showSpeedMenu = false }
+            )
+        }
+        
+        // --- 7.5 🔥 [新增] 视频比例选择菜单 ---
+        if (showRatioMenu) {
+            AspectRatioMenu(
+                currentRatio = currentAspectRatio,
+                onRatioSelected = { ratio ->
+                    onAspectRatioChange(ratio)
+                    showRatioMenu = false
+                },
+                onDismiss = { showRatioMenu = false }
             )
         }
         

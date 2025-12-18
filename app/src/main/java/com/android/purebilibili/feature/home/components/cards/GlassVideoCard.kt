@@ -12,15 +12,10 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.BlurredEdgeTreatment
-import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -31,20 +26,23 @@ import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.android.purebilibili.core.util.FormatUtils
 import com.android.purebilibili.core.util.iOSTapEffect
+import com.android.purebilibili.core.util.animateEnter
 import com.android.purebilibili.data.model.response.VideoItem
 
 /**
- * 🍎 玻璃拟态卡片 - Vision Pro 风格 (豪华版)
+ * 🍎 玻璃拟态卡片 - Vision Pro 风格 (性能优化版)
  * 
  * 特点：
- * - 真实的毛玻璃效果
  * - 彩虹渐变边框
- * - 多层阴影营造深度
+ * - 轻量阴影
  * - 悬浮播放按钮
+ * 
+ * 🚀 性能优化：移除了昂贵的 blur() 和多层阴影
  */
 @Composable
 fun GlassVideoCard(
     video: VideoItem,
+    index: Int = 0,  // 🔥🔥 [新增] 索引用于动画延迟
     onClick: (String, Long) -> Unit
 ) {
     val coverUrl = remember(video.bvid) {
@@ -57,50 +55,29 @@ fun GlassVideoCard(
     // 🍎 玻璃背景色 - 使用系统主题色自动适配
     val glassBackground = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f)
     
-    // 🌈 彩虹渐变边框色（更鲜艳）
-    val rainbowColors = listOf(
-        Color(0xFFFF6B6B),  // 珊瑚红
-        Color(0xFFFF8E53),  // 橙色
-        Color(0xFFFFD93D),  // 金黄
-        Color(0xFF6BCB77),  // 翠绿
-        Color(0xFF4D96FF),  // 天蓝
-        Color(0xFF9B59B6),  // 紫色
-        Color(0xFFFF6B6B)   // 循环回红色
-    )
+    // 🌈 彩虹渐变边框色
+    val rainbowColors = remember {
+        listOf(
+            Color(0xFFFF6B6B),  // 珊瑩红
+            Color(0xFFFF8E53),  // 橙色
+            Color(0xFFFFD93D),  // 金黄
+            Color(0xFF6BCB77),  // 翠绿
+            Color(0xFF4D96FF),  // 天蓝
+            Color(0xFF9B59B6),  // 紫色
+            Color(0xFFFF6B6B)   // 循环回红色
+        )
+    }
 
     Box(
         modifier = Modifier
             .fillMaxWidth()
             .padding(6.dp)
+            // 🔥🔥 [新增] 进场动画 - 交错缩放+滑入
+            .animateEnter(index = index, key = video.bvid)
     ) {
-        // 🖼️ 背景模糊层 - 真实毛玻璃效果
-        Box(
-            modifier = Modifier
-                .matchParentSize()
-                .offset(y = 8.dp)
-                .blur(radius = 20.dp, edgeTreatment = BlurredEdgeTreatment.Unbounded)
-                .background(
-                    brush = Brush.verticalGradient(
-                        colors = listOf(
-                            primaryColor.copy(alpha = 0.3f),
-                            primaryColor.copy(alpha = 0.1f)
-                        )
-                    ),
-                    shape = RoundedCornerShape(24.dp)
-                )
-        )
-        
-        // 🍎 外发光 - 柔和的光晕
-        Box(
-            modifier = Modifier
-                .matchParentSize()
-                .shadow(
-                    elevation = 20.dp,
-                    shape = RoundedCornerShape(20.dp),
-                    ambientColor = primaryColor.copy(alpha = 0.25f),
-                    spotColor = primaryColor.copy(alpha = 0.35f)
-                )
-        )
+        // 🚀 [性能优化] 移除 blur() 层，改用静态渐变色
+        // 原：blur(radius = 20.dp) 成本很高
+        // 新：单层轻量阴影
         
         // 🍎 玻璃卡片主体
         Box(
@@ -142,11 +119,12 @@ fun GlassVideoCard(
                                 ambientColor = Color.Black.copy(alpha = 0.3f)
                             )
                     ) {
+                        // 🚀 [性能优化] 降低图片尺寸
                         AsyncImage(
                             model = ImageRequest.Builder(LocalContext.current)
                                 .data(coverUrl)
-                                .crossfade(120)
-                                .size(480, 300)
+                                .crossfade(100)  // 🚀 缩短淡入时间
+                                .size(360, 225)  // 🚀 优化：360x225 替代 480x300
                                 .memoryCacheKey("glass_${video.bvid}")
                                 .diskCacheKey("glass_${video.bvid}")
                                 .build(),
@@ -251,12 +229,14 @@ fun GlassVideoCard(
                         
                         Spacer(modifier = Modifier.width(8.dp))
                         
-                        // 播放量
-                        Text(
-                            text = "${FormatUtils.formatStat(video.stat.view.toLong())}播放",
-                            color = onSurfaceVariant.copy(alpha = 0.7f),
-                            fontSize = 11.sp
-                        )
+                        // 播放量 - 🔥 [修复] 只在有播放量时显示
+                        if (video.stat.view > 0) {
+                            Text(
+                                text = "${FormatUtils.formatStat(video.stat.view.toLong())}播放",
+                                color = onSurfaceVariant.copy(alpha = 0.7f),
+                                fontSize = 11.sp
+                            )
+                        }
                     }
                 }
             }

@@ -268,8 +268,7 @@ fun ActionButtonsRow(
     onFavoriteClick: () -> Unit = {},
     onLikeClick: () -> Unit = {},
     onCoinClick: () -> Unit = {},
-    onTripleClick: () -> Unit = {},
-    onCommentClick: () -> Unit
+    onTripleClick: () -> Unit = {}
 ) {
     Row(
         modifier = Modifier
@@ -314,16 +313,8 @@ fun ActionButtonsRow(
             activeColor = Color(0xFFE91E63),
             onClick = onTripleClick
         )
-
-        // 🔥 评论
-        val replyCount = runCatching { info.stat.reply }.getOrDefault(0)
-        BiliActionButton(
-            icon = Icons.Outlined.ChatBubbleOutline,
-            text = FormatUtils.formatStat(replyCount.toLong()),
-            isActive = false,
-            activeColor = MaterialTheme.colorScheme.primary,
-            onClick = onCommentClick
-        )
+        
+        // 🔥🔥 [删除] 评论按钮已移除，因下方已有评论区入口
     }
 }
 
@@ -692,32 +683,66 @@ fun RelatedVideoItem(video: RelatedVideo, onClick: () -> Unit) {
                     color = MaterialTheme.colorScheme.onBackground
                 )
 
-                // UP主信息行 🔥 优化样式
-                Row(
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    // UP主头标
-                    Surface(
-                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f),
-                        shape = RoundedCornerShape(4.dp)
+                // UP主信息行 + 播放量/弹幕 🔥 [优化] 新增统计信息
+                Column {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
+                        // UP主头标
+                        Surface(
+                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f),
+                            shape = RoundedCornerShape(4.dp)
+                        ) {
+                            Text(
+                                text = "UP",
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(4.dp))
                         Text(
-                            text = "UP",
-                            fontSize = 9.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
+                            text = video.owner.name,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
+                            fontSize = 12.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
                     }
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text(
-                        text = video.owner.name,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
-                        fontSize = 12.sp,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
+                    
+                    Spacer(modifier = Modifier.height(4.dp))
+                    
+                    // 🔥🔥 [新增] 播放量 · 弹幕数
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            Icons.Filled.PlayArrow,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                            modifier = Modifier.size(12.dp)
+                        )
+                        Spacer(modifier = Modifier.width(2.dp))
+                        Text(
+                            text = FormatUtils.formatStat(video.stat.view.toLong()),
+                            fontSize = 11.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "·",
+                            fontSize = 11.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "${FormatUtils.formatStat(video.stat.danmaku.toLong())}弹幕",
+                            fontSize = 11.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                        )
+                    }
                 }
             }
         }

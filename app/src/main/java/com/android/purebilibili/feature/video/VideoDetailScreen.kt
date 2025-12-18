@@ -637,10 +637,8 @@ fun VideoContentSection(
                 onFavoriteClick = onFavoriteClick,
                 onLikeClick = onLikeClick,
                 onCoinClick = onCoinClick,
-                onTripleClick = onTripleClick,
-                onCommentClick = {
-                    selectedTabIndex = 1 // 切换到评论 Tab
-                }
+                onTripleClick = onTripleClick
+                // 🔥🔥 [删除] onCommentClick 已移除，因下方有评论 Tab
             )
         }
 

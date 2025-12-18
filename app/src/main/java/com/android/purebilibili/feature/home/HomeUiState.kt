@@ -62,5 +62,7 @@ data class HomeUiState(
     val currentCategory: HomeCategory = HomeCategory.RECOMMEND,
     val liveSubCategory: LiveSubCategory = LiveSubCategory.FOLLOWED,
     val refreshKey: Long = 0L,
-    val followingMids: Set<Long> = emptySet()
+    val followingMids: Set<Long> = emptySet(),
+    // 🔥🔥 [新增] 标签页显示索引（独立于内容分类，用于特殊分类导航后保持标签位置）
+    val displayedTabIndex: Int = 0
 )

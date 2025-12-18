@@ -10,6 +10,8 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -216,20 +218,23 @@ fun QrCodeLoginContent(
     onRefresh: () -> Unit
 ) {
     Column(
-        modifier = Modifier.fillMaxSize(),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState()),
+        horizontalAlignment = Alignment.CenterHorizontally
     ) {
+        Spacer(modifier = Modifier.height(16.dp))
+        
         // 二维码卡片
         Surface(
             shape = RoundedCornerShape(24.dp),
             color = Color.White,
             shadowElevation = 24.dp,
-            modifier = Modifier.size(280.dp)
+            modifier = Modifier.size(260.dp)
         ) {
             Box(
                 contentAlignment = Alignment.Center,
-                modifier = Modifier.padding(24.dp)
+                modifier = Modifier.padding(20.dp)
             ) {
                 when (state) {
                     is LoginState.Loading -> {
@@ -255,7 +260,7 @@ fun QrCodeLoginContent(
             }
         }
 
-        Spacer(modifier = Modifier.height(24.dp))
+        Spacer(modifier = Modifier.height(20.dp))
 
         // 提示文字
         when (state) {
@@ -274,6 +279,8 @@ fun QrCodeLoginContent(
             }
             else -> {}
         }
+        
+        Spacer(modifier = Modifier.height(24.dp))
     }
 }
 
@@ -414,6 +421,8 @@ private fun SuccessIndicator() {
 
 @Composable
 private fun QrCodeHint() {
+    var showTip by remember { mutableStateOf(false) }
+    
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Row(
             verticalAlignment = Alignment.CenterVertically
@@ -426,7 +435,7 @@ private fun QrCodeHint() {
             )
             Spacer(modifier = Modifier.width(8.dp))
             Text(
-                text = "打开 Bilibili App 扫一扫",
+                text = "打开「哔哩哔哩」扫一扫",
                 color = Color.White,
                 fontSize = 15.sp,
                 fontWeight = FontWeight.Medium
@@ -437,6 +446,97 @@ private fun QrCodeHint() {
             text = "首页左上角 → 扫一扫",
             color = Color.White.copy(alpha = 0.5f),
             fontSize = 13.sp
+        )
+        
+        Spacer(modifier = Modifier.height(12.dp))
+        
+        // 🔥 单手机登录提示
+        Surface(
+            shape = RoundedCornerShape(8.dp),
+            color = Color.White.copy(alpha = 0.08f),
+            onClick = { showTip = !showTip },
+            modifier = Modifier.fillMaxWidth(0.9f)
+        ) {
+            Column(modifier = Modifier.padding(12.dp)) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(
+                        Icons.Outlined.Lightbulb,
+                        contentDescription = null,
+                        tint = Color(0xFFFFD54F),
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = "只有一部手机？点击查看方法",
+                        color = Color.White.copy(alpha = 0.7f),
+                        fontSize = 12.sp
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Icon(
+                        if (showTip) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore,
+                        contentDescription = null,
+                        tint = Color.White.copy(alpha = 0.5f),
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
+                
+                if (showTip) {
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(
+                                Color.White.copy(alpha = 0.05f),
+                                RoundedCornerShape(6.dp)
+                            )
+                            .padding(10.dp)
+                    ) {
+                        SinglePhoneTipItem(number = "1", text = "截图保存此二维码")
+                        Spacer(modifier = Modifier.height(6.dp))
+                        SinglePhoneTipItem(number = "2", text = "打开「哔哩哔哩」→ 扫一扫 → 相册")
+                        Spacer(modifier = Modifier.height(6.dp))
+                        SinglePhoneTipItem(number = "3", text = "选择截图并确认登录")
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = "✨ 扫码登录可解锁 4K/HDR 高画质",
+                            color = BiliPink.copy(alpha = 0.9f),
+                            fontSize = 11.sp,
+                            modifier = Modifier.fillMaxWidth(),
+                            textAlign = TextAlign.Center
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SinglePhoneTipItem(number: String, text: String) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Surface(
+            shape = CircleShape,
+            color = BiliPink.copy(alpha = 0.3f),
+            modifier = Modifier.size(18.dp)
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                Text(
+                    text = number,
+                    color = Color.White,
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        }
+        Spacer(modifier = Modifier.width(8.dp))
+        Text(
+            text = text,
+            color = Color.White.copy(alpha = 0.8f),
+            fontSize = 12.sp
         )
     }
 }
@@ -683,32 +783,41 @@ fun PhoneLoginContent(
         modifier = Modifier.fillMaxSize(),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        // 提示卡片
+        // 🔥 画质限制警告卡片
         Surface(
             shape = RoundedCornerShape(12.dp),
-            color = Color.White.copy(alpha = 0.08f),
+            color = Color(0xFFFF9800).copy(alpha = 0.15f),
             modifier = Modifier.fillMaxWidth()
         ) {
             Row(
                 modifier = Modifier.padding(12.dp),
-                verticalAlignment = Alignment.CenterVertically
+                verticalAlignment = Alignment.Top
             ) {
                 Icon(
-                    Icons.Outlined.PhoneAndroid,
+                    Icons.Outlined.Info,
                     contentDescription = null,
-                    tint = BiliPink,
+                    tint = Color(0xFFFF9800),
                     modifier = Modifier.size(20.dp)
                 )
-                Spacer(modifier = Modifier.width(12.dp))
-                Text(
-                    text = "使用手机号验证登录，更便捷",
-                    color = Color.White.copy(alpha = 0.8f),
-                    fontSize = 13.sp
-                )
+                Spacer(modifier = Modifier.width(10.dp))
+                Column {
+                    Text(
+                        text = "手机号登录最高 1080P",
+                        color = Color.White.copy(alpha = 0.9f),
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Medium
+                    )
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = "使用「扫码登录」可解锁 4K/HDR 高画质",
+                        color = Color.White.copy(alpha = 0.6f),
+                        fontSize = 11.sp
+                    )
+                }
             }
         }
 
-        Spacer(modifier = Modifier.height(32.dp))
+        Spacer(modifier = Modifier.height(24.dp))
         
         // 主卡片
         Surface(

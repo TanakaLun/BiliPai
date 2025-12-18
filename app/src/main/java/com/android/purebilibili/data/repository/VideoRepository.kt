@@ -2,6 +2,7 @@
 package com.android.purebilibili.data.repository
 
 import com.android.purebilibili.core.cache.PlayUrlCache
+import com.android.purebilibili.core.network.AppSignUtils
 import com.android.purebilibili.core.network.NetworkModule
 import com.android.purebilibili.core.network.WbiKeyManager
 import com.android.purebilibili.core.network.WbiUtils
@@ -361,6 +362,20 @@ object VideoRepository {
     }
 
     suspend fun getPlayUrlData(bvid: String, cid: Long, qn: Int): PlayUrlData? = withContext(Dispatchers.IO) {
+        // 🔥🔥 [新增] 对于高画质请求 (>=112)，优先尝试 APP API
+        val isHighQuality = qn >= 112
+        val accessToken = TokenManager.accessTokenCache
+        
+        if (isHighQuality && !accessToken.isNullOrEmpty()) {
+            com.android.purebilibili.core.util.Logger.d("VideoRepo", "🔥 High quality request (qn=$qn), trying APP API first...")
+            val appResult = fetchPlayUrlWithAccessToken(bvid, cid, qn)
+            if (appResult != null) {
+                com.android.purebilibili.core.util.Logger.d("VideoRepo", "✅ APP API success for high quality")
+                return@withContext appResult
+            }
+            com.android.purebilibili.core.util.Logger.d("VideoRepo", "⚠️ APP API failed, fallback to Web API")
+        }
+        
         // 🔥🔥 [修复] 412 错误处理：清除 WBI 密钥缓存后重试
         var result = fetchPlayUrlWithWbi(bvid, cid, qn)
         if (result == null) {
@@ -588,6 +603,14 @@ object VideoRepository {
         // 🔥 使用缓存的 Keys
         val (imgKey, subKey) = getWbiKeys()
         
+        // 🔥🔥 [新增] 生成 session 参数 (buvid3 + 时间戳 MD5)
+        val buvid3 = com.android.purebilibili.core.store.TokenManager.buvid3Cache ?: ""
+        val timestamp = System.currentTimeMillis()
+        val sessionRaw = buvid3 + timestamp.toString()
+        val session = java.security.MessageDigest.getInstance("MD5")
+            .digest(sessionRaw.toByteArray())
+            .joinToString("") { "%02x".format(it) }
+        
         val params = mapOf(
             "bvid" to bvid, "cid" to cid.toString(), "qn" to qn.toString(),
             "fnval" to "4048",  // 🔥 全部 DASH 格式，一次性获取所有可用流
@@ -595,6 +618,8 @@ object VideoRepository {
             "platform" to "pc",  // 🔥 改用 pc (Web默认值)，支持所有格式
             "high_quality" to "1",
             "try_look" to "1",  // 🔥 允许未登录用户尝试获取更高画质 (64/80)
+            // 🔥🔥 [新增] session 参数 - VIP 画质可能需要
+            "session" to session,
             // 🔥🔥 [参考 PiliPala] 以下参数经过用户验证，提高成功率
             "voice_balance" to "1",
             "gaia_source" to "pre-load",
@@ -605,6 +630,9 @@ object VideoRepository {
         
         com.android.purebilibili.core.util.Logger.d("VideoRepo", "🔥 PlayUrl response: code=${response.code}, requestedQn=$qn, returnedQuality=${response.data?.quality}")
         com.android.purebilibili.core.util.Logger.d("VideoRepo", "🔥 accept_quality=${response.data?.accept_quality}, accept_description=${response.data?.accept_description}")
+        // 🔥🔥 [调试] 输出 DASH 视频流 ID 列表
+        val dashIds = response.data?.dash?.video?.map { it.id }?.distinct()?.sortedDescending()
+        com.android.purebilibili.core.util.Logger.d("VideoRepo", "🔥 DASH video IDs: $dashIds")
         
         if (response.code == 0) return response.data
         
@@ -615,6 +643,60 @@ object VideoRepository {
         if (response.code in listOf(-404, -403, -10403, -62002)) {
             throw Exception(errorMessage)
         }
+        return null
+    }
+    
+    // 🔥🔥 [新增] 使用 access_token 获取高画质视频流 (4K/HDR/1080P60)
+    private suspend fun fetchPlayUrlWithAccessToken(bvid: String, cid: Long, qn: Int): PlayUrlData? {
+        val accessToken = com.android.purebilibili.core.store.TokenManager.accessTokenCache
+        if (accessToken.isNullOrEmpty()) {
+            com.android.purebilibili.core.util.Logger.d("VideoRepo", "❌ No access_token available, fallback to Web API")
+            return null
+        }
+        
+        com.android.purebilibili.core.util.Logger.d("VideoRepo", "🔥 fetchPlayUrlWithAccessToken: bvid=$bvid, qn=$qn, accessToken=${accessToken.take(10)}...")
+        
+        // 🔥🔥 [修复] 必须使用 TV appkey，因为 access_token 是通过 TV 登录获取的
+        // 根据 B站 API 文档：通过某一组 APPKEY/APPSEC 获取到的 access_token，之后的 API 调用也必须使用同一组
+        val params = mapOf(
+            "bvid" to bvid,
+            "cid" to cid.toString(),
+            "qn" to qn.toString(),
+            "fnval" to "4048",  // 全部 DASH 格式
+            "fnver" to "0",
+            "fourk" to "1",
+            "access_key" to accessToken,
+            "appkey" to AppSignUtils.TV_APP_KEY,  // 🔥 使用 TV appkey (与登录时一致)
+            "ts" to AppSignUtils.getTimestamp().toString(),
+            "platform" to "android",
+            "mobi_app" to "android_tv_yst",  // 🔥 TV 端标识
+            "device" to "android"
+        )
+        
+        val signedParams = AppSignUtils.signForTvLogin(params)  // 🔥 使用 TV 签名
+        
+        try {
+            val response = api.getPlayUrlApp(signedParams)
+            
+            val dashIds = response.data?.dash?.video?.map { it.id }?.distinct()?.sortedDescending()
+            com.android.purebilibili.core.util.Logger.d("VideoRepo", "🔥 APP PlayUrl response: code=${response.code}, qn=$qn, dashIds=$dashIds")
+            
+            if (response.code == 0 && response.data != null) {
+                // 检查是否真的获取到了高画质流
+                val hasHighQuality = dashIds?.any { it >= qn } == true
+                if (hasHighQuality) {
+                    com.android.purebilibili.core.util.Logger.d("VideoRepo", "✅ APP API returned high quality: $dashIds")
+                    return response.data
+                } else {
+                    com.android.purebilibili.core.util.Logger.d("VideoRepo", "⚠️ APP API didn't return target quality $qn, available: $dashIds")
+                }
+            } else {
+                com.android.purebilibili.core.util.Logger.d("VideoRepo", "❌ APP API error: code=${response.code}, msg=${response.message}")
+            }
+        } catch (e: Exception) {
+            com.android.purebilibili.core.util.Logger.d("VideoRepo", "❌ APP API exception: ${e.message}")
+        }
+        
         return null
     }
 

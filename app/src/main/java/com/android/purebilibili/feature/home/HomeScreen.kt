@@ -128,8 +128,9 @@ fun HomeScreen(
     // 🔥 当前选中的导航项
     var currentNavItem by remember { mutableStateOf(BottomNavItem.HOME) }
     
-    // 🔥 分类标签索引由 ViewModel 状态计算
-    val categoryIndex = state.currentCategory.ordinal
+    // 🔥🔥 [修复] 使用 ViewModel 中的标签页显示索引（跨导航保持）
+    // 当用户滑动到特殊分类时，标签页位置更新，但内容分类保持不变
+    val displayedTabIndex = state.displayedTabIndex
     
     // 🔥🔥 [修复] 使用 rememberSaveable 记住本次会话中是否已处理过弹窗（防止导航后重新显示）
     var consentDialogHandled by rememberSaveable { mutableStateOf(false) }
@@ -206,19 +207,17 @@ fun HomeScreen(
     }
 
 
-    // 🔥 下拉刷新触发逻辑
-    if (pullRefreshState.isRefreshing) {
-        LaunchedEffect(true) { viewModel.refresh() }
+    // 🔥🔥 [修复] 下拉刷新触发逻辑 - 使用正确的 key 确保每次都能触发
+    LaunchedEffect(pullRefreshState.isRefreshing) {
+        if (pullRefreshState.isRefreshing) {
+            viewModel.refresh()
+        }
     }
     LaunchedEffect(isRefreshing) {
         if (!isRefreshing) pullRefreshState.endRefresh()
     }
     
-    // 🔥🔥 [修复] 如果当前在未实现的分类上，手势返回切换到推荐分类而不是退出应用
-    val isUnimplementedCategory = state.currentCategory in listOf(HomeCategory.ANIME, HomeCategory.MOVIE)
-    androidx.activity.compose.BackHandler(enabled = isUnimplementedCategory) {
-        viewModel.switchCategory(HomeCategory.RECOMMEND)
-    }
+    // 🔥🔥 [已移除] 特殊分类（ANIME, MOVIE等）不再在首页切换，直接导航到独立页面
     
     // 🔥🔥 [修复] 如果当前在直播-关注分类且列表为空，返回时先切换到热门，再切换到推荐
     val isEmptyLiveFollowed = state.currentCategory == HomeCategory.LIVE && 
@@ -239,14 +238,26 @@ fun HomeScreen(
     // 🔥 记录滑动方向用于动画 (true = 向右/上一个分类, false = 向左/下一个分类)
     var swipeDirection by remember { mutableStateOf(true) }
     
+    // 🔥🔥 [修复] 特殊分类列表（有独立页面，不在首页显示内容）
+    val specialCategories = listOf(
+        HomeCategory.ANIME, 
+        HomeCategory.MOVIE, 
+        HomeCategory.GAME, 
+        HomeCategory.KNOWLEDGE, 
+        HomeCategory.TECH
+    )
+    
     // 🔥 水平滑动切换分类的回调
-    val switchToPreviousCategory: () -> Unit = remember(state.currentCategory) {
+    val switchToPreviousCategory: () -> Unit = remember(displayedTabIndex) {
         {
             swipeDirection = true  // 右滑
-            val currentIndex = HomeCategory.entries.indexOf(state.currentCategory)
-            if (currentIndex > 0) {
-                val prevCategory = HomeCategory.entries[currentIndex - 1]
-                // 处理特殊分类（番剧、影视等需要跳转而非切换）
+            // 🔥🔥 [修复] 使用 ViewModel 中的标签页索引
+            if (displayedTabIndex > 0) {
+                val prevIndex = displayedTabIndex - 1
+                val prevCategory = HomeCategory.entries[prevIndex]
+                // 更新标签页显示位置（通过 ViewModel）
+                viewModel.updateDisplayedTabIndex(prevIndex)
+                // 🔥🔥 [修复] 对于特殊分类，只导航到独立页面；普通分类更新内容
                 when (prevCategory) {
                     HomeCategory.ANIME -> onBangumiClick(1)
                     HomeCategory.MOVIE -> onBangumiClick(2)
@@ -258,13 +269,16 @@ fun HomeScreen(
         }
     }
     
-    val switchToNextCategory: () -> Unit = remember(state.currentCategory) {
+    val switchToNextCategory: () -> Unit = remember(displayedTabIndex) {
         {
             swipeDirection = false  // 左滑
-            val currentIndex = HomeCategory.entries.indexOf(state.currentCategory)
-            if (currentIndex < HomeCategory.entries.size - 1) {
-                val nextCategory = HomeCategory.entries[currentIndex + 1]
-                // 处理特殊分类（番剧、影视等需要跳转而非切换）
+            // 🔥🔥 [修复] 使用 ViewModel 中的标签页索引
+            if (displayedTabIndex < HomeCategory.entries.size - 1) {
+                val nextIndex = displayedTabIndex + 1
+                val nextCategory = HomeCategory.entries[nextIndex]
+                // 更新标签页显示位置（通过 ViewModel）
+                viewModel.updateDisplayedTabIndex(nextIndex)
+                // 🔥🔥 [修复] 对于特殊分类，只导航到独立页面；普通分类更新内容
                 when (nextCategory) {
                     HomeCategory.ANIME -> onBangumiClick(1)
                     HomeCategory.MOVIE -> onBangumiClick(2)
@@ -373,157 +387,132 @@ fun HomeScreen(
                         .padding(bottom = if (isBottomBarFloating) 100.dp else padding.calculateBottomPadding() + 20.dp)
                 )
             } else {
-                // 🔥 使用 AnimatedContent 实现分类切换动画
-                AnimatedContent(
-                    targetState = state.currentCategory,
-                    transitionSpec = {
-                        // 根据滑动方向决定动画方向
-                        if (swipeDirection) {
-                            // 右滑：新内容从左边滑入，旧内容向右边滑出
-                            (slideInHorizontally(
-                                animationSpec = tween(300),
-                                initialOffsetX = { -it / 3 }
-                            ) + fadeIn(animationSpec = tween(300))).togetherWith(
-                                slideOutHorizontally(
-                                    animationSpec = tween(300),
-                                    targetOffsetX = { it / 3 }
-                                ) + fadeOut(animationSpec = tween(300))
-                            )
-                        } else {
-                            // 左滑：新内容从右边滑入，旧内容向左边滑出
-                            (slideInHorizontally(
-                                animationSpec = tween(300),
-                                initialOffsetX = { it / 3 }
-                            ) + fadeIn(animationSpec = tween(300))).togetherWith(
-                                slideOutHorizontally(
-                                    animationSpec = tween(300),
-                                    targetOffsetX = { -it / 3 }
-                                ) + fadeOut(animationSpec = tween(300))
+                // 🚀 [性能优化] 移除 AnimatedContent 包裹，减少分类切换时的重组开销
+                // 原：AnimatedContent 对整个 Grid 做动画，成本很高
+                // 新：直接渲染，分类切换瞬间完成
+                val targetCategory = state.currentCategory
+                
+                // ✅ 对齐模式 (Regular Grid - 每行底部对齐)
+                LazyVerticalGrid(
+                    state = gridState,
+                    columns = GridCells.Fixed(gridColumns),
+                    contentPadding = PaddingValues(
+                        top = 156.dp,  // 🔥 Header 高度
+                        bottom = if (isBottomBarFloating) 100.dp else padding.calculateBottomPadding() + 20.dp,
+                        start = 8.dp, 
+                        end = 8.dp
+                    ),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(bottom = if (isBottomBarFloating) 0.dp else navBarHeight)
+                        // 🔥 水平滑动手势切换分类
+                        .pointerInput(targetCategory) {
+                            var totalDragX = 0f
+                            detectHorizontalDragGestures(
+                                onDragStart = { totalDragX = 0f },
+                                onDragEnd = {
+                                    // 滑动阈值：120px
+                                    if (totalDragX > 120f) {
+                                        // 右滑：切换到上一个分类
+                                        switchToPreviousCategory()
+                                    } else if (totalDragX < -120f) {
+                                        // 左滑：切换到下一个分类
+                                        switchToNextCategory()
+                                    }
+                                },
+                                onDragCancel = { totalDragX = 0f },
+                                onHorizontalDrag = { change, dragAmount ->
+                                    change.consume()
+                                    totalDragX += dragAmount
+                                }
                             )
                         }
-                    },
-                    label = "category_transition"
-                ) { targetCategory ->
-                    // ✅ 对齐模式 (Regular Grid - 每行底部对齐)
-                    LazyVerticalGrid(
-                        state = gridState,
-                        columns = GridCells.Fixed(gridColumns),
-                        contentPadding = PaddingValues(
-                            top = 156.dp,  // 🔥 Header 高度
-                            bottom = if (isBottomBarFloating) 100.dp else padding.calculateBottomPadding() + 20.dp,
-                            start = 8.dp, 
-                            end = 8.dp
-                        ),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(bottom = if (isBottomBarFloating) 0.dp else navBarHeight)
-                            // 🔥 水平滑动手势切换分类
-                            .pointerInput(targetCategory) {
-                                var totalDragX = 0f
-                                detectHorizontalDragGestures(
-                                    onDragStart = { totalDragX = 0f },
-                                    onDragEnd = {
-                                        // 滑动阈值：120px
-                                        if (totalDragX > 120f) {
-                                            // 右滑：切换到上一个分类
-                                            switchToPreviousCategory()
-                                        } else if (totalDragX < -120f) {
-                                            // 左滑：切换到下一个分类
-                                            switchToNextCategory()
-                                        }
-                                    },
-                                    onDragCancel = { totalDragX = 0f },
-                                    onHorizontalDrag = { change, dragAmount ->
-                                        change.consume()
-                                        totalDragX += dragAmount
-                                    }
-                                )
-                            }
-                    ) {
-                        if (targetCategory == HomeCategory.LIVE) {
-                            item(span = { GridItemSpan(gridColumns) }) {
-                                LiveSubCategoryRow(
-                                    selectedSubCategory = state.liveSubCategory,
-                                    onSubCategorySelected = { viewModel.switchLiveSubCategory(it) }
-                                )
-                            }
-
-                            if (state.liveRooms.isNotEmpty()) {
-                                itemsIndexed(
-                                    items = state.liveRooms,
-                                    key = { _, room -> room.roomid },
-                                    contentType = { _, _ -> "live_room" }
-                                ) { index, room ->
-                                    LiveRoomCard(
-                                        room = room,
-                                        index = index,
-                                        onClick = { onLiveClick(room.roomid, room.title, room.uname) } 
-                                    )
-                                }
-                            }
-                        } else {
-                            if (state.videos.isNotEmpty()) {
-                                itemsIndexed(
-                                    items = state.videos,
-                                    key = { _, video -> video.bvid },
-                                    contentType = { _, _ -> "video" }
-                                ) { index, video ->
-                                    // 🔥🔥 [新增] 根据展示模式选择卡片样式
-                                    when (displayMode) {
-                                        1 -> {
-                                            // 🎬 故事卡片 (Apple TV+ 风格)
-                                            StoryVideoCard(
-                                                video = video,
-                                                onClick = { bvid, cid -> onVideoClick(bvid, cid, video.pic) }
-                                            )
-                                        }
-                                        2 -> {
-                                            // 🍎 玻璃拟态 (Vision Pro 风格)
-                                            GlassVideoCard(
-                                                video = video,
-                                                onClick = { bvid, cid -> onVideoClick(bvid, cid, video.pic) }
-                                            )
-                                        }
-                                        else -> {
-                                            // 🔥 默认网格卡片
-                                            ElegantVideoCard(
-                                                video = video,
-                                                index = index,
-                                                isFollowing = video.owner.mid in state.followingMids,  // 🔥 判断是否已关注
-                                                onClick = { bvid, cid -> onVideoClick(bvid, cid, video.pic) }
-                                            )
-                                        }
-                                    }
-                                }
-                            }
+                ) {
+                    if (targetCategory == HomeCategory.LIVE) {
+                        item(span = { GridItemSpan(gridColumns) }) {
+                            LiveSubCategoryRow(
+                                selectedSubCategory = state.liveSubCategory,
+                                onSubCategorySelected = { viewModel.switchLiveSubCategory(it) }
+                            )
                         }
 
-                        if (!state.isLoading && state.error == null) {
-                            item(span = { GridItemSpan(gridColumns) }) {
-                                LaunchedEffect(Unit) {
-                                    viewModel.loadMore()
-                                }
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(16.dp),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    if (state.isLoading) {
-                                        CupertinoActivityIndicator(
-                                            modifier = Modifier.size(24.dp),
-                                            color = MaterialTheme.colorScheme.secondary
+                        if (state.liveRooms.isNotEmpty()) {
+                            itemsIndexed(
+                                items = state.liveRooms,
+                                key = { _, room -> room.roomid },
+                                contentType = { _, _ -> "live_room" }
+                            ) { index, room ->
+                                LiveRoomCard(
+                                    room = room,
+                                    index = index,
+                                    onClick = { onLiveClick(room.roomid, room.title, room.uname) } 
+                                )
+                            }
+                        }
+                    } else {
+                        if (state.videos.isNotEmpty()) {
+                            itemsIndexed(
+                                items = state.videos,
+                                key = { _, video -> video.bvid },
+                                contentType = { _, _ -> "video" }
+                            ) { index, video ->
+                                // 🔥🔥 [新增] 根据展示模式选择卡片样式
+                                when (displayMode) {
+                                    1 -> {
+                                        // 🎬 故事卡片 (Apple TV+ 风格)
+                                        StoryVideoCard(
+                                            video = video,
+                                            index = index,  // 🔥 动画索引
+                                            onClick = { bvid, cid -> onVideoClick(bvid, cid, video.pic) }
+                                        )
+                                    }
+                                    2 -> {
+                                        // 🍎 玻璃拟态 (Vision Pro 风格)
+                                        GlassVideoCard(
+                                            video = video,
+                                            index = index,  // 🔥 动画索引
+                                            onClick = { bvid, cid -> onVideoClick(bvid, cid, video.pic) }
+                                        )
+                                    }
+                                    else -> {
+                                        // 🔥 默认网格卡片
+                                        ElegantVideoCard(
+                                            video = video,
+                                            index = index,
+                                            isFollowing = video.owner.mid in state.followingMids,  // 🔥 判断是否已关注
+                                            onClick = { bvid, cid -> onVideoClick(bvid, cid, video.pic) }
                                         )
                                     }
                                 }
                             }
                         }
-                        
+                    }
+
+                    if (!state.isLoading && state.error == null) {
                         item(span = { GridItemSpan(gridColumns) }) {
-                            Box(modifier = Modifier.fillMaxWidth().height(20.dp))
+                            LaunchedEffect(Unit) {
+                                viewModel.loadMore()
+                            }
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(16.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                if (state.isLoading) {
+                                    CupertinoActivityIndicator(
+                                        modifier = Modifier.size(24.dp),
+                                        color = MaterialTheme.colorScheme.secondary
+                                    )
+                                }
+                            }
                         }
+                    }
+                    
+                    item(span = { GridItemSpan(gridColumns) }) {
+                        Box(modifier = Modifier.fillMaxWidth().height(20.dp))
                     }
                 }
             }
@@ -545,8 +534,10 @@ fun HomeScreen(
                     onAvatarClick = { if (state.user.isLogin) onProfileClick() else onAvatarClick() },
                     onSettingsClick = onSettingsClick,
                     onSearchClick = onSearchClick,
-                    categoryIndex = HomeCategory.entries.indexOf(state.currentCategory),
+                    categoryIndex = displayedTabIndex,  // 🔥🔥 [修复] 使用 ViewModel 中的标签页索引
                     onCategorySelected = { index ->
+                        // 🔥🔥 [修复] 通过 ViewModel 更新标签页显示位置
+                        viewModel.updateDisplayedTabIndex(index)
                         val category = HomeCategory.entries[index]
                         // 🔥🔥 分类跳转逻辑
                         when (category) {

@@ -7,6 +7,7 @@ import com.android.purebilibili.feature.video.state.VideoPlayerState
 import com.android.purebilibili.feature.video.viewmodel.PlayerUiState
 import com.android.purebilibili.feature.video.ui.overlay.VideoPlayerOverlay
 import com.android.purebilibili.feature.video.ui.components.SponsorSkipButton
+import com.android.purebilibili.feature.video.ui.components.VideoAspectRatio
 
 import android.app.Activity
 import android.content.Context
@@ -118,6 +119,9 @@ fun VideoPlayerSection(
     var seekTargetTime by remember { mutableLongStateOf(0L) }
     var startPosition by remember { mutableLongStateOf(0L) }
     var isGestureVisible by remember { mutableStateOf(false) }
+    
+    // 🔥 视频比例状态
+    var currentAspectRatio by remember { mutableStateOf(VideoAspectRatio.FIT) }
 
     // 记录手势开始时的初始值
     var startVolume by remember { mutableIntStateOf(0) }
@@ -279,32 +283,20 @@ fun VideoPlayerSection(
             danmakuManager.isEnabled = danmakuEnabled
         }
         
-        // 🔥🔥 [修复] 根据全屏状态设置弹幕顶部边距
-        // 非全屏时需要避开状态栏，全屏时不需要边距
-        LaunchedEffect(isFullscreen) {
-            if (isFullscreen) {
-                danmakuManager.topMarginPx = 0  // 全屏无边距
-            } else {
-                // 获取状态栏高度 + 额外缓冲
-                val resourceId = context.resources.getIdentifier(
-                    "status_bar_height", "dimen", "android"
-                )
-                val statusBarHeight = if (resourceId > 0) {
-                    context.resources.getDimensionPixelSize(resourceId)
-                } else {
-                    (24 * context.resources.displayMetrics.density).toInt()
-                }
-                danmakuManager.topMarginPx = statusBarHeight + 30  // 状态栏 + 30px 缓冲
-            }
-        }
+        // 🔥🔥 [注意] 边距现在在 DanmakuView 的 AndroidView 中通过 padding 设置
+        // 不再使用 DanmakuContext.setDanmakuMargin，避免 ConcurrentModificationException
         
         // 🔥 绑定 Player（不在 onDispose 中释放，单例保持状态）
         DisposableEffect(playerState.player) {
+            android.util.Log.d("VideoPlayerSection", "🎬 attachPlayer, isFullscreen=$isFullscreen")
             danmakuManager.attachPlayer(playerState.player)
             onDispose {
-                // 单例模式不需要释放，只需解绑视图
+                // 单例模式不需要释放
             }
         }
+        
+        // 🔥🔥 [注意] 移除了 DisposableEffect(isFullscreen) 的 detachView 调用
+        // 因为 attachView 已经会自动暂停旧视图，不需要额外 detach
         
         // 1. PlayerView (底层)
         AndroidView(
@@ -314,10 +306,12 @@ fun VideoPlayerSection(
                     setShowBuffering(PlayerView.SHOW_BUFFERING_ALWAYS)
                     useController = false
                     keepScreenOn = true
+                    resizeMode = currentAspectRatio.resizeMode
                 }
             },
             update = { playerView ->
                 playerView.player = playerState.player
+                playerView.resizeMode = currentAspectRatio.resizeMode
             },
             modifier = Modifier.fillMaxSize()
         )
@@ -490,7 +484,10 @@ fun VideoPlayerSection(
                 danmakuSpeed = danmakuManager.speedFactor,
                 onDanmakuOpacityChange = { danmakuManager.opacity = it },
                 onDanmakuFontScaleChange = { danmakuManager.fontScale = it },
-                onDanmakuSpeedChange = { danmakuManager.speedFactor = it }
+                onDanmakuSpeedChange = { danmakuManager.speedFactor = it },
+                // 🔥 视频比例调节
+                currentAspectRatio = currentAspectRatio,
+                onAspectRatioChange = { currentAspectRatio = it }
             )
         }
         

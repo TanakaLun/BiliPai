@@ -48,3 +48,10 @@ keystore.properties
 *.aab
 **/release/
 app/release/
+
+# 🔥 忽略 AI/Agent 相关文件
+.agent/
+.gemini/
+.cursor/
+.claude/
+*.ai.md

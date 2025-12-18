@@ -37,10 +37,19 @@ fun QualitySelectionMenu(
 ) {
     fun getQualityTag(qualityId: Int): String? {
         return when (qualityId) {
-            127, 126, 125, 120 -> if (!isVip) "\u5927\u4f1a\u5458" else null
-            116, 112 -> if (!isVip) "\u5927\u4f1a\u5458" else null
-            80 -> if (!isLoggedIn) "\u767b\u5f55" else null
+            127, 126, 125, 120 -> if (!isVip) "大会员" else null
+            116, 112 -> if (!isVip) "大会员" else null
+            80 -> if (!isLoggedIn) "登录" else null
             else -> null
+        }
+    }
+    
+    // 🔥🔥 [新增] 判断用户是否有权限使用该画质
+    fun isQualityAvailable(qualityId: Int): Boolean {
+        return when {
+            qualityId >= 112 -> isVip  // VIP 画质需要大会员
+            qualityId >= 80 -> isLoggedIn  // 1080P 需要登录
+            else -> true  // 720P 及以下无限制
         }
     }
 
@@ -65,7 +74,7 @@ fun QualitySelectionMenu(
         ) {
             Column(modifier = Modifier.padding(vertical = 8.dp)) {
                 Text(
-                    text = "\u753b\u8d28\u9009\u62e9",
+                    text = "画质选择",
                     color = Color.White,
                     fontSize = 15.sp,
                     fontWeight = FontWeight.Bold,
@@ -76,10 +85,12 @@ fun QualitySelectionMenu(
                     val isSelected = quality == currentQuality
                     val qualityId = qualityIds.getOrNull(index) ?: 0
                     val tag = getQualityTag(qualityId)
+                    val isAvailable = isQualityAvailable(qualityId)
 
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
+                            // 🔥🔥 [修改] 不可用画质仍可点击，由 ViewModel 处理权限提示
                             .clickable { onQualitySelected(index) }
                             .background(if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.15f) else Color.Transparent)
                             .padding(horizontal = 16.dp, vertical = 14.dp),
@@ -87,7 +98,12 @@ fun QualitySelectionMenu(
                     ) {
                         Text(
                             text = quality,
-                            color = if (isSelected) MaterialTheme.colorScheme.primary else Color.White.copy(0.9f),
+                            // 🔥🔥 [修改] 不可用画质显示为灰色
+                            color = when {
+                                isSelected -> MaterialTheme.colorScheme.primary
+                                !isAvailable -> Color.White.copy(0.4f)
+                                else -> Color.White.copy(0.9f)
+                            },
                             fontSize = 14.sp,
                             fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
                         )
@@ -95,7 +111,7 @@ fun QualitySelectionMenu(
                         if (tag != null) {
                             Spacer(modifier = Modifier.width(8.dp))
                             Surface(
-                                color = if (tag == "\u5927\u4f1a\u5458") Color(0xFFFB7299) else Color(0xFF666666),
+                                color = if (tag == "大会员") Color(0xFFFB7299) else Color(0xFF666666),
                                 shape = RoundedCornerShape(4.dp)
                             ) {
                                 Text(

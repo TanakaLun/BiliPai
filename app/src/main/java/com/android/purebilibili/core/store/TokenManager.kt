@@ -26,6 +26,8 @@ object TokenManager {
     private const val SP_KEY_BUVID = "buvid3_backup"
     private const val SP_KEY_CSRF = "bili_jct_backup"  // 🔥 新增 CSRF 持久化
     private const val SP_KEY_MID = "mid_backup"        // 🔥 新增 MID 持久化
+    private const val SP_KEY_ACCESS_TOKEN = "access_token_backup"  // 🔥🔥 [新增] APP access_token
+    private const val SP_KEY_REFRESH_TOKEN = "refresh_token_backup"  // 🔥🔥 [新增] APP refresh_token
 
     @Volatile
     var sessDataCache: String? = null
@@ -46,6 +48,16 @@ object TokenManager {
     // 🔥 [新增] 用户 MID 缓存
     @Volatile
     var midCache: Long? = null
+    
+    // 🔥🔥 [新增] APP access_token - 用于调用 APP API 获取高画质视频流
+    @Volatile
+    var accessTokenCache: String? = null
+        private set
+    
+    // 🔥🔥 [新增] APP refresh_token - 用于刷新 access_token
+    @Volatile
+    var refreshTokenCache: String? = null
+        private set
 
     fun init(context: Context) {
         // 1. 🔥 同步读取 SP 备份，确保主线程立即有数据
@@ -54,8 +66,10 @@ object TokenManager {
         buvid3Cache = sp.getString(SP_KEY_BUVID, null)
         csrfCache = sp.getString(SP_KEY_CSRF, null)  // 🔥 读取 CSRF
         midCache = sp.getLong(SP_KEY_MID, 0L).takeIf { it > 0 }  // 🔥 读取 MID
+        accessTokenCache = sp.getString(SP_KEY_ACCESS_TOKEN, null)  // 🔥🔥 读取 access_token
+        refreshTokenCache = sp.getString(SP_KEY_REFRESH_TOKEN, null)  // 🔥🔥 读取 refresh_token
         
-        com.android.purebilibili.core.util.Logger.d("TokenManager", "🔥 init: sessData=${sessDataCache?.take(10)}..., csrf=${csrfCache?.take(10)}..., mid=$midCache")
+        com.android.purebilibili.core.util.Logger.d("TokenManager", "🔥 init: sessData=${sessDataCache?.take(10)}..., accessToken=${accessTokenCache?.take(10)}..., mid=$midCache")
 
         // 2. 启动 DataStore 监听 (主要数据源)
         CoroutineScope(Dispatchers.IO).launch {
@@ -99,6 +113,18 @@ object TokenManager {
             .edit().putLong(SP_KEY_MID, mid).apply()
         com.android.purebilibili.core.util.Logger.d("TokenManager", "🔥 saveMid: $mid")
     }
+    
+    // 🔥🔥 [新增] 保存 APP access_token 和 refresh_token - TV 端登录后调用
+    fun saveAccessToken(context: Context, accessToken: String, refreshToken: String) {
+        accessTokenCache = accessToken
+        refreshTokenCache = refreshToken
+        context.getSharedPreferences(SP_NAME, Context.MODE_PRIVATE)
+            .edit()
+            .putString(SP_KEY_ACCESS_TOKEN, accessToken)
+            .putString(SP_KEY_REFRESH_TOKEN, refreshToken)
+            .apply()
+        com.android.purebilibili.core.util.Logger.d("TokenManager", "🔥 saveAccessToken: ${accessToken.take(10)}..., refreshToken: ${refreshToken.take(10)}...")
+    }
 
     suspend fun saveCookies(context: Context, sessData: String) {
         sessDataCache = sessData
@@ -132,10 +158,16 @@ object TokenManager {
 
     suspend fun clear(context: Context) {
         sessDataCache = null
+        accessTokenCache = null  // 🔥🔥 [新增] 清除 access_token
+        refreshTokenCache = null
         
         // 清除 SP
         context.getSharedPreferences(SP_NAME, Context.MODE_PRIVATE)
-            .edit().remove(SP_KEY_SESS).apply()
+            .edit()
+            .remove(SP_KEY_SESS)
+            .remove(SP_KEY_ACCESS_TOKEN)
+            .remove(SP_KEY_REFRESH_TOKEN)
+            .apply()
 
         // 清除 DataStore
         context.dataStore.edit {

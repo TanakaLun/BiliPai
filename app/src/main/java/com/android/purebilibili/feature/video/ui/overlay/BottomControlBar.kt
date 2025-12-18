@@ -14,6 +14,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.android.purebilibili.core.util.FormatUtils
+import com.android.purebilibili.feature.video.ui.components.VideoAspectRatio
+import com.android.purebilibili.core.theme.BiliPink
 
 /**
  * Bottom Control Bar Component
@@ -43,9 +45,11 @@ fun BottomControlBar(
     progress: PlayerProgress,
     isFullscreen: Boolean,
     currentSpeed: Float = 1.0f,
+    currentRatio: VideoAspectRatio = VideoAspectRatio.FIT,
     onPlayPauseClick: () -> Unit,
     onSeek: (Long) -> Unit,
     onSpeedClick: () -> Unit = {},
+    onRatioClick: () -> Unit = {},
     onToggleFullscreen: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -100,7 +104,24 @@ fun BottomControlBar(
             ) {
                 Text(
                     text = if (currentSpeed == 1.0f) "\u500d\u901f" else "${currentSpeed}x",
-                    color = Color.White,
+                    color = if (currentSpeed != 1.0f) BiliPink else Color.White,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                )
+            }
+            
+            Spacer(modifier = Modifier.width(8.dp))
+            
+            // 🔥 Aspect Ratio button
+            Surface(
+                onClick = onRatioClick,
+                color = Color.White.copy(alpha = 0.2f),
+                shape = RoundedCornerShape(4.dp)
+            ) {
+                Text(
+                    text = currentRatio.displayName,
+                    color = if (currentRatio != VideoAspectRatio.FIT) BiliPink else Color.White,
                     fontSize = 12.sp,
                     fontWeight = FontWeight.SemiBold,
                     modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)

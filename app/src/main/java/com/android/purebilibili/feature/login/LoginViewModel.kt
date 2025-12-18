@@ -40,12 +40,24 @@ class LoginViewModel(application: Application) : AndroidViewModel(application) {
     private var qrcodeKey: String = ""
     private var isPolling = true
 
+    /**
+     * 🔥🔥 [重构] 统一使用 TV 端二维码登录
+     * 这样登录后自动获得 access_token，支持 4K/HDR/1080P60 高画质视频
+     */
     fun loadQrCode() {
+        // 🔥 直接调用 TV 登录，获取 access_token
+        loadTvQrCode()
+    }
+    
+    /**
+     * [保留] 原 Web 端二维码登录 (作为备用)
+     */
+    fun loadWebQrCode() {
         isPolling = true
         viewModelScope.launch {
             try {
                 _state.value = LoginState.Loading
-                Logger.d("LoginDebug", "1. 开始获取二维码...")
+                Logger.d("LoginDebug", "1. 开始获取 Web 二维码...")
 
                 val resp = NetworkModule.passportApi.generateQrCode()
 
@@ -56,7 +68,7 @@ class LoginViewModel(application: Application) : AndroidViewModel(application) {
                 // 👇 这里使用 ?: 抛出异常，解决了 Type mismatch 问题
                 qrcodeKey = data.qrcode_key ?: throw Exception("二维码 Key 为空")
 
-                Logger.d("LoginDebug", "2. 二维码获取成功 Key: $qrcodeKey")
+                Logger.d("LoginDebug", "2. Web 二维码获取成功 Key: $qrcodeKey")
                 val bitmap = generateQrBitmap(url)
                 currentBitmap = bitmap // 🔥 保存以便在 Scanned 状态使用
                 _state.value = LoginState.QrCode(bitmap)
@@ -390,5 +402,155 @@ class LoginViewModel(application: Application) : AndroidViewModel(application) {
         currentCaptchaKey = ""
         currentPhone = 0
         _state.value = LoginState.PhoneIdle
+    }
+    
+    // ========== 🔥🔥 TV 端登录方法 (获取 access_token 用于高画质视频) ==========
+    
+    private var tvAuthCode: String = ""
+    private var isTvPolling = false
+    
+    /**
+     * 使用 TV 端 API 获取二维码 (获取 access_token)
+     * 这个方法返回的 access_token 可用于获取 4K/HDR/1080P60 高画质视频
+     */
+    fun loadTvQrCode() {
+        isTvPolling = true
+        viewModelScope.launch {
+            try {
+                _state.value = LoginState.Loading
+                Logger.d("TvLogin", "1. 开始获取 TV 二维码...")
+                
+                // 构建 TV 端请求参数
+                val params = mapOf(
+                    "appkey" to com.android.purebilibili.core.network.AppSignUtils.TV_APP_KEY,
+                    "local_id" to "0",
+                    "ts" to com.android.purebilibili.core.network.AppSignUtils.getTimestamp().toString()
+                )
+                val signedParams = com.android.purebilibili.core.network.AppSignUtils.signForTvLogin(params)
+                
+                val response = NetworkModule.passportApi.generateTvQrCode(signedParams)
+                
+                if (response.code == 0 && response.data != null) {
+                    val data = response.data
+                    tvAuthCode = data.authCode ?: throw Exception("TV auth_code 为空")
+                    val qrUrl = data.url ?: throw Exception("TV 二维码 URL 为空")
+                    
+                    Logger.d("TvLogin", "2. TV 二维码获取成功: authCode=${tvAuthCode.take(10)}...")
+                    
+                    val bitmap = generateQrBitmap(qrUrl)
+                    currentBitmap = bitmap
+                    _state.value = LoginState.QrCode(bitmap)
+                    
+                    startTvPolling()
+                } else {
+                    Logger.d("TvLogin", "获取 TV 二维码失败: code=${response.code}, msg=${response.message}")
+                    _state.value = LoginState.Error("获取二维码失败: ${response.message}")
+                }
+            } catch (e: Exception) {
+                com.android.purebilibili.core.util.Logger.e("TvLogin", "获取 TV 二维码异常", e)
+                _state.value = LoginState.Error(e.message ?: "网络错误")
+            }
+        }
+    }
+    
+    /**
+     * 轮询 TV 登录状态
+     */
+    private fun startTvPolling() {
+        viewModelScope.launch {
+            Logger.d("TvLogin", "3. 开始 TV 轮询...")
+            while (isTvPolling) {
+                delay(2000)
+                try {
+                    val params = mapOf(
+                        "appkey" to com.android.purebilibili.core.network.AppSignUtils.TV_APP_KEY,
+                        "auth_code" to tvAuthCode,
+                        "local_id" to "0",
+                        "ts" to com.android.purebilibili.core.network.AppSignUtils.getTimestamp().toString()
+                    )
+                    val signedParams = com.android.purebilibili.core.network.AppSignUtils.signForTvLogin(params)
+                    
+                    val response = NetworkModule.passportApi.pollTvQrCode(signedParams)
+                    
+                    Logger.d("TvLogin", "TV 轮询状态: code=${response.code}")
+                    
+                    when (response.code) {
+                        0 -> {
+                            // 登录成功
+                            Logger.d("TvLogin", "✅ TV 登录成功!")
+                            val data = response.data
+                            if (data != null) {
+                                // 保存 access_token
+                                TokenManager.saveAccessToken(
+                                    getApplication(),
+                                    data.accessToken,
+                                    data.refreshToken
+                                )
+                                
+                                // 保存 mid
+                                if (data.mid > 0) {
+                                    TokenManager.saveMid(getApplication(), data.mid)
+                                }
+                                
+                                // 从 cookie_info 中提取并保存 SESSDATA, bili_jct
+                                data.cookieInfo?.cookies?.forEach { cookie ->
+                                    when (cookie.name) {
+                                        "SESSDATA" -> {
+                                            kotlinx.coroutines.runBlocking {
+                                                TokenManager.saveCookies(getApplication(), cookie.value)
+                                            }
+                                            Logger.d("TvLogin", "✅ 保存 SESSDATA: ${cookie.value.take(10)}...")
+                                        }
+                                        "bili_jct" -> {
+                                            TokenManager.saveCsrf(getApplication(), cookie.value)
+                                            Logger.d("TvLogin", "✅ 保存 bili_jct: ${cookie.value.take(10)}...")
+                                        }
+                                    }
+                                }
+                                
+                                Logger.d("TvLogin", "✅ access_token: ${data.accessToken.take(10)}...")
+                                
+                                isTvPolling = false
+                                withContext(Dispatchers.Main) {
+                                    _state.value = LoginState.Success
+                                }
+                            } else {
+                                _state.value = LoginState.Error("登录数据解析失败")
+                            }
+                        }
+                        86039 -> {
+                            // 尚未确认
+                            Logger.d("TvLogin", "等待扫码确认...")
+                        }
+                        86090 -> {
+                            // 已扫码待确认
+                            Logger.d("TvLogin", "📱 二维码已扫描，等待确认...")
+                            currentBitmap?.let { bitmap ->
+                                withContext(Dispatchers.Main) {
+                                    _state.value = LoginState.Scanned(bitmap)
+                                }
+                            }
+                        }
+                        86038 -> {
+                            // 二维码过期
+                            _state.value = LoginState.Error("二维码已过期，请刷新")
+                            isTvPolling = false
+                        }
+                        else -> {
+                            Logger.d("TvLogin", "未知状态: ${response.code} - ${response.message}")
+                        }
+                    }
+                } catch (e: Exception) {
+                    com.android.purebilibili.core.util.Logger.e("TvLogin", "TV 轮询异常", e)
+                }
+            }
+        }
+    }
+    
+    /**
+     * 停止 TV 轮询
+     */
+    fun stopTvPolling() {
+        isTvPolling = false
     }
 }

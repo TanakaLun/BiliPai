@@ -20,8 +20,10 @@ android {
         applicationId = "com.android.purebilibili"
         minSdk = 26
         targetSdk = 34
-        versionCode = 7
-        versionName = "3.0.3-beta1"
+        // 🔥🔥 [版本号] 发布新版前记得更新！格式：versionCode +1, versionName 递增
+        // 更新日志：CHANGELOG.md
+        versionCode = 8
+        versionName = "3.0.5"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -95,6 +97,8 @@ android {
         unitTests.all {
             it.useJUnitPlatform()
         }
+        // 🔥 允许 Android 类在单元测试中返回默认值而非抛出异常
+        unitTests.isReturnDefaultValues = true
     }
 }
 

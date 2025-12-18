@@ -145,6 +145,86 @@ class QualityManager {
     fun requiresLogin(qualityId: Int): Boolean {
         return qualityId >= 80
     }
+    
+    /**
+     * 检查用户是否有权限使用指定画质
+     * 
+     * @param qualityId 目标画质 ID
+     * @param isLoggedIn 是否已登录
+     * @param isVip 是否为大会员
+     * @return 权限检查结果
+     */
+    fun checkQualityPermission(
+        qualityId: Int,
+        isLoggedIn: Boolean,
+        isVip: Boolean
+    ): QualityPermissionResult {
+        val label = getQualityLabel(qualityId)
+        
+        return when {
+            // VIP 画质 (≥112): 需要大会员
+            requiresVip(qualityId) && !isVip -> {
+                Logger.d(TAG, "Quality $qualityId requires VIP, user isVip=$isVip")
+                QualityPermissionResult.RequiresVip(label)
+            }
+            // 需要登录的画质 (≥80): 需要登录
+            requiresLogin(qualityId) && !isLoggedIn -> {
+                Logger.d(TAG, "Quality $qualityId requires login, user isLoggedIn=$isLoggedIn")
+                QualityPermissionResult.RequiresLogin(label)
+            }
+            // 有权限
+            else -> {
+                Logger.d(TAG, "Quality $qualityId permitted for user (isLoggedIn=$isLoggedIn, isVip=$isVip)")
+                QualityPermissionResult.Permitted
+            }
+        }
+    }
+    
+    /**
+     * 获取用户可用的最高画质
+     * 
+     * @param availableQualities 视频支持的画质列表
+     * @param isLoggedIn 是否已登录
+     * @param isVip 是否为大会员
+     * @return 最高可用画质 ID，如果无可用画质返回默认值 64 (720P)
+     */
+    fun getMaxAvailableQuality(
+        availableQualities: List<Int>,
+        isLoggedIn: Boolean,
+        isVip: Boolean
+    ): Int {
+        if (availableQualities.isEmpty()) return 64
+        
+        // 按画质从高到低排序，找到第一个有权限的画质
+        val sortedQualities = availableQualities.sortedDescending()
+        
+        for (quality in sortedQualities) {
+            val permission = checkQualityPermission(quality, isLoggedIn, isVip)
+            if (permission is QualityPermissionResult.Permitted) {
+                Logger.d(TAG, "Max available quality for user: $quality")
+                return quality
+            }
+        }
+        
+        // 如果没有符合权限的画质，返回最低画质
+        val fallback = sortedQualities.lastOrNull() ?: 64
+        Logger.d(TAG, "No permitted quality found, fallback to: $fallback")
+        return fallback
+    }
+}
+
+/**
+ * 画质权限检查结果
+ */
+sealed class QualityPermissionResult {
+    /** 有权限使用该画质 */
+    object Permitted : QualityPermissionResult()
+    
+    /** 需要大会员 */
+    data class RequiresVip(val qualityLabel: String) : QualityPermissionResult()
+    
+    /** 需要登录 */
+    data class RequiresLogin(val qualityLabel: String) : QualityPermissionResult()
 }
 
 /**

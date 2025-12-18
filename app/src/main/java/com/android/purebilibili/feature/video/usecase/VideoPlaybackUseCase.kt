@@ -234,27 +234,37 @@ class VideoPlaybackUseCase(
         cachedAudios: List<DashAudio>,
         currentPos: Long
     ): QualitySwitchResult? {
-        if (cachedVideos.isEmpty()) return null
-        
-        val dashVideo = cachedVideos.find { it.id == qualityId }
-            ?: cachedVideos.filter { it.id <= qualityId }.maxByOrNull { it.id }
-            ?: cachedVideos.minByOrNull { it.id }
-        
-        val dashAudio = cachedAudios.firstOrNull()
-        val videoUrl = dashVideo?.getValidUrl() ?: return null
-        val audioUrl = dashAudio?.getValidUrl()
-        
-        if (videoUrl.isNotEmpty()) {
-            playDashVideo(videoUrl, audioUrl, currentPos)
-            return QualitySwitchResult(
-                videoUrl = videoUrl,
-                audioUrl = audioUrl,
-                actualQuality = dashVideo.id,
-                wasFallback = dashVideo.id != qualityId,
-                cachedDashVideos = cachedVideos,
-                cachedDashAudios = cachedAudios
-            )
+        if (cachedVideos.isEmpty()) {
+            Logger.d("VideoPlaybackUseCase", "🔥 changeQualityFromCache: cache is EMPTY, returning null")
+            return null
         }
+        
+        // 🔥🔥 [调试] 输出缓存中的所有画质
+        val availableIds = cachedVideos.map { it.id }.distinct().sortedDescending()
+        Logger.d("VideoPlaybackUseCase", "🔥 changeQualityFromCache: target=$qualityId, available=$availableIds")
+        
+        // 🔥🔥 [优先精确匹配] 先找精确匹配
+        val exactMatch = cachedVideos.find { it.id == qualityId }
+        if (exactMatch != null) {
+            Logger.d("VideoPlaybackUseCase", "✅ Exact match found: ${exactMatch.id}")
+            val videoUrl = exactMatch.getValidUrl()
+            val dashAudio = cachedAudios.firstOrNull()
+            val audioUrl = dashAudio?.getValidUrl()
+            if (videoUrl.isNotEmpty()) {
+                playDashVideo(videoUrl, audioUrl, currentPos)
+                return QualitySwitchResult(
+                    videoUrl = videoUrl,
+                    audioUrl = audioUrl,
+                    actualQuality = exactMatch.id,
+                    wasFallback = false,
+                    cachedDashVideos = cachedVideos,
+                    cachedDashAudios = cachedAudios
+                )
+            }
+        }
+        
+        // 🔥🔥 [降级逻辑] 缓存中没有目标画质，需要返回 null 让调用者请求 API
+        Logger.d("VideoPlaybackUseCase", "⚠️ Target quality $qualityId not in cache, returning null to trigger API request")
         return null
     }
     
@@ -267,15 +277,32 @@ class VideoPlaybackUseCase(
         qualityId: Int,
         currentPos: Long
     ): QualitySwitchResult? {
-        val playUrlData = VideoRepository.getPlayUrlData(bvid, cid, qualityId) ?: return null
+        Logger.d("VideoPlaybackUseCase", "🔥 changeQualityFromApi: bvid=$bvid, cid=$cid, target=$qualityId")
+        
+        val playUrlData = VideoRepository.getPlayUrlData(bvid, cid, qualityId) ?: run {
+            Logger.d("VideoPlaybackUseCase", "❌ getPlayUrlData returned null")
+            return null
+        }
+        
+        // 🔥🔥 [调试] 输出 API 返回的画质信息
+        val returnedQuality = playUrlData.quality
+        val acceptQualities = playUrlData.accept_quality
+        val dashVideoIds = playUrlData.dash?.video?.map { it.id }?.distinct()?.sortedDescending()
+        Logger.d("VideoPlaybackUseCase", "🔥 API returned: quality=$returnedQuality, accept_quality=$acceptQualities")
+        Logger.d("VideoPlaybackUseCase", "🔥 DASH videos available: $dashVideoIds")
         
         val dashVideo = playUrlData.dash?.getBestVideo(qualityId)
         val dashAudio = playUrlData.dash?.getBestAudio()
         
+        Logger.d("VideoPlaybackUseCase", "🔥 getBestVideo selected: ${dashVideo?.id}")
+        
         val videoUrl = getValidVideoUrl(dashVideo, playUrlData)
         val audioUrl = dashAudio?.getValidUrl()
         
-        if (videoUrl.isEmpty()) return null
+        if (videoUrl.isEmpty()) {
+            Logger.d("VideoPlaybackUseCase", "❌ Video URL is empty")
+            return null
+        }
         
         if (dashVideo != null) {
             playDashVideo(videoUrl, audioUrl, currentPos)
@@ -283,11 +310,14 @@ class VideoPlaybackUseCase(
             playVideo(videoUrl, currentPos)
         }
         
+        val actualQuality = dashVideo?.id ?: playUrlData.quality ?: qualityId
+        Logger.d("VideoPlaybackUseCase", "✅ Quality switch result: target=$qualityId, actual=$actualQuality")
+        
         return QualitySwitchResult(
             videoUrl = videoUrl,
             audioUrl = audioUrl,
-            actualQuality = dashVideo?.id ?: playUrlData.quality ?: qualityId,
-            wasFallback = (dashVideo?.id ?: qualityId) != qualityId,
+            actualQuality = actualQuality,
+            wasFallback = actualQuality != qualityId,
             cachedDashVideos = playUrlData.dash?.video ?: emptyList(),
             cachedDashAudios = playUrlData.dash?.audio ?: emptyList()
         )

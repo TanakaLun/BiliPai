@@ -23,6 +23,7 @@ import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.android.purebilibili.core.util.FormatUtils
 import com.android.purebilibili.core.util.rememberHapticFeedback
+import com.android.purebilibili.core.util.animateEnter
 import com.android.purebilibili.data.model.response.VideoItem
 import com.android.purebilibili.core.theme.iOSSystemGray
 import com.android.purebilibili.core.util.iOSTapEffect
@@ -57,6 +58,8 @@ fun ElegantVideoCard(
     Column(
         modifier = Modifier
             .fillMaxWidth()
+            // 🔥🔥 [新增] 进场动画 - 交错缩放+滑入
+            .animateEnter(index = index, key = video.bvid)
             .iOSTapEffect(
                 scale = 0.97f,
                 hapticEnabled = true
@@ -79,12 +82,12 @@ fun ElegantVideoCard(
                 .clip(RoundedCornerShape(8.dp))
                 .background(MaterialTheme.colorScheme.surfaceVariant)
         ) {
-            // 封面图
+            // 封面图 - 🚀 [性能优化] 降低图片尺寸
             AsyncImage(
                 model = ImageRequest.Builder(LocalContext.current)
                     .data(coverUrl)
-                    .size(480, 300)
-                    .crossfade(120)
+                    .size(360, 225)  // 🚀 优化：360x225 替代 480x300
+                    .crossfade(100)  // 🚀 缩短淡入时间
                     .memoryCacheKey("cover_${video.bvid}")
                     .diskCacheKey("cover_${video.bvid}")
                     .build(),
@@ -202,13 +205,13 @@ fun ElegantVideoCard(
                 )
             }
             
-            // 🔥 UP主头像（小圆形，官方风格）
+            // 🔥 UP主头像（小圆形，官方风格）- 🚀 [性能优化] 缩小头像尺寸
             if (video.owner.face.isNotEmpty()) {
                 AsyncImage(
                     model = ImageRequest.Builder(LocalContext.current)
                         .data(FormatUtils.fixImageUrl(video.owner.face))
-                        .crossfade(150)
-                        .size(48, 48)
+                        .crossfade(100)
+                        .size(32, 32)  // 🚀 优化：32x32 替代 48x48
                         .memoryCacheKey("avatar_${video.owner.mid}")
                         .build(),
                     contentDescription = null,

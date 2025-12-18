@@ -54,13 +54,14 @@ interface BilibiliApi {
         @Query("ps") ps: Int = 20
     ): PopularResponse  // 🔥 使用专用响应类型
     
-    // 🔥🔥 [新增] 分区视频 - 按分类 ID 获取视频
-    @GET("x/web-interface/newlist")
+    // 🔥🔥 [修复] 分区视频 - 使用 dynamic/region API 返回完整 stat（包含播放量）
+    // 原 newlist API 不返回 stat 数据
+    @GET("x/web-interface/dynamic/region")
     suspend fun getRegionVideos(
-        @Query("rid") rid: Int,    // 分区 ID (如 129=舞蹈)
+        @Query("rid") rid: Int,    // 分区 ID (如 4=游戏, 36=知识, 188=科技)
         @Query("pn") pn: Int = 1,
         @Query("ps") ps: Int = 30
-    ): RegionVideosResponse
+    ): DynamicRegionResponse
     
     // 🔥🔥 [新增] 直播列表 - 使用正确的 API 端点
     @GET("https://api.live.bilibili.com/room/v3/area/getRoomList")
@@ -128,6 +129,10 @@ interface BilibiliApi {
         @Query("platform") platform: String = "html5",
         @Query("high_quality") highQuality: Int = 1
     ): PlayUrlResponse
+    
+    // 🔥🔥 [新增] APP playurl API - 使用 access_token 获取高画质视频流 (4K/HDR/1080P60)
+    @GET("https://api.bilibili.com/x/player/playurl")
+    suspend fun getPlayUrlApp(@QueryMap params: Map<String, String>): PlayUrlResponse
 
     @GET("x/web-interface/archive/related")
     suspend fun getRelatedVideos(@Query("bvid") bvid: String): RelatedResponse
@@ -426,6 +431,22 @@ interface PassportApi {
         @retrofit2.http.Field("source") source: String = "main-fe-header",
         @retrofit2.http.Field("go_url") goUrl: String = "https://www.bilibili.com"
     ): Response<LoginResponse>
+    
+    // ========== 🔥🔥 TV 端登录 (获取 access_token 用于高画质视频) ==========
+    
+    // TV 端申请二维码
+    @retrofit2.http.FormUrlEncoded
+    @retrofit2.http.POST("https://passport.bilibili.com/x/passport-tv-login/qrcode/auth_code")
+    suspend fun generateTvQrCode(
+        @retrofit2.http.FieldMap params: Map<String, String>
+    ): TvQrCodeResponse
+    
+    // TV 端轮询登录状态
+    @retrofit2.http.FormUrlEncoded
+    @retrofit2.http.POST("https://passport.bilibili.com/x/passport-tv-login/qrcode/poll")
+    suspend fun pollTvQrCode(
+        @retrofit2.http.FieldMap params: Map<String, String>
+    ): TvPollResponse
 }
 
 
@@ -516,6 +537,22 @@ object NetworkModule {
                             .name("SESSDATA")
                             .value(sessData)
                             .build())
+                    }
+                    
+                    // 🔥🔥 [新增] 添加 bili_jct (CSRF Token) - VIP 画质验证可能需要
+                    val biliJct = TokenManager.csrfCache
+                    if (!biliJct.isNullOrEmpty() && cookies.none { it.name == "bili_jct" }) {
+                        cookies.add(okhttp3.Cookie.Builder()
+                            .domain(url.host)
+                            .name("bili_jct")
+                            .value(biliJct)
+                            .build())
+                    }
+                    
+                    // 🔥🔥 [调试] 输出 Cookie 信息以便排查 VIP 画质问题
+                    if (url.encodedPath.contains("playurl")) {
+                        com.android.purebilibili.core.util.Logger.d("CookieJar", 
+                            "🔥 PlayUrl request cookies: SESSDATA=${sessData?.take(10)}..., bili_jct=${biliJct?.take(10)}..., isVip=${TokenManager.isVipCache}")
                     }
                     
                     return cookies

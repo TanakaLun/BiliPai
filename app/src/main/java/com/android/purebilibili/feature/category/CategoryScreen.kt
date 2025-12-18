@@ -4,7 +4,7 @@ package com.android.purebilibili.feature.category
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -12,13 +12,18 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.android.purebilibili.core.store.SettingsManager
+import com.android.purebilibili.core.store.HomeSettings
 import com.android.purebilibili.data.model.response.VideoItem
 import com.android.purebilibili.data.repository.VideoRepository
+import com.android.purebilibili.feature.home.components.cards.ElegantVideoCard
 import com.android.purebilibili.feature.home.components.cards.GlassVideoCard
+import com.android.purebilibili.feature.home.components.cards.StoryVideoCard
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
@@ -94,6 +99,14 @@ fun CategoryScreen(
     val isLoading by viewModel.isLoading.collectAsState()
     val error by viewModel.error.collectAsState()
     val gridState = rememberLazyGridState()
+    val context = LocalContext.current
+    
+    // 🔥🔥 [修复] 读取首页设置，保持显示模式一致
+    val homeSettings by SettingsManager.getHomeSettings(context).collectAsState(
+        initial = HomeSettings()
+    )
+    val displayMode = homeSettings.displayMode
+    val gridColumns = if (displayMode == 1) 1 else 2  // 故事模式用1列，其他用2列
     
     // 首次加载
     LaunchedEffect(tid) {
@@ -149,17 +162,43 @@ fun CategoryScreen(
             } else {
                 // 视频网格
                 LazyVerticalGrid(
-                    columns = GridCells.Fixed(2),
+                    columns = GridCells.Fixed(gridColumns),
                     state = gridState,
                     contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    items(videos, key = { it.bvid }) { video ->
-                        GlassVideoCard(
-                            video = video,
-                            onClick = { bvid, _ -> onVideoClick(bvid, video.id, video.pic) }
-                        )
+                    itemsIndexed(
+                        items = videos,
+                        key = { _, video -> video.bvid }
+                    ) { index, video ->
+                        // 🔥🔥 [修复] 根据首页设置选择卡片样式（与 HomeScreen 一致）
+                        when (displayMode) {
+                            1 -> {
+                                // 🎬 故事卡片 (Apple TV+ 风格)
+                                StoryVideoCard(
+                                    video = video,
+                                    index = index,  // 🔥 动画索引
+                                    onClick = { bvid, _ -> onVideoClick(bvid, video.id, video.pic) }
+                                )
+                            }
+                            2 -> {
+                                // 🍎 玻璃拟态 (Vision Pro 风格)
+                                GlassVideoCard(
+                                    video = video,
+                                    index = index,  // 🔥 动画索引
+                                    onClick = { bvid, _ -> onVideoClick(bvid, video.id, video.pic) }
+                                )
+                            }
+                            else -> {
+                                // 🔥 默认网格卡片
+                                ElegantVideoCard(
+                                    video = video,
+                                    index = index,
+                                    onClick = { bvid, _ -> onVideoClick(bvid, video.id, video.pic) }
+                                )
+                            }
+                        }
                     }
                     
                     // 加载更多指示器

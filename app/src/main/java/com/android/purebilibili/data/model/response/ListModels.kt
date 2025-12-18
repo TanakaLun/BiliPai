@@ -541,7 +541,67 @@ data class FollowedLiveRoom(
     }
 }
 
-// --- 🔥 分区视频 Response ---
+// --- 🔥🔥 [修复] 分区视频 Response (使用 dynamic/region API) ---
+// 该 API 返回完整的 stat 数据，包含播放量
+
+@Serializable
+data class DynamicRegionResponse(
+    val code: Int = 0,
+    val message: String = "",
+    val data: DynamicRegionData? = null
+)
+
+@Serializable
+data class DynamicRegionData(
+    val archives: List<DynamicRegionItem>? = null
+)
+
+@Serializable
+data class DynamicRegionItem(
+    val aid: Long = 0,
+    val bvid: String = "",
+    val cid: Long = 0,
+    val pic: String = "",
+    val title: String = "",
+    val duration: Int = 0,
+    val pubdate: Long = 0,
+    val owner: Owner = Owner(),
+    val stat: DynamicRegionStat = DynamicRegionStat()
+) {
+    fun toVideoItem(): VideoItem {
+        return VideoItem(
+            id = cid,
+            bvid = bvid,
+            title = title,
+            pic = pic,
+            owner = owner,
+            stat = Stat(
+                view = stat.view,
+                like = stat.like,
+                danmaku = stat.danmaku,
+                reply = stat.reply,
+                coin = stat.coin,
+                favorite = stat.favorite,
+                share = stat.share
+            ),
+            duration = duration,
+            pubdate = pubdate
+        )
+    }
+}
+
+@Serializable
+data class DynamicRegionStat(
+    val view: Int = 0,
+    val like: Int = 0,
+    val danmaku: Int = 0,
+    val reply: Int = 0,
+    val coin: Int = 0,
+    val favorite: Int = 0,
+    val share: Int = 0
+)
+
+// --- 🔥 旧版分区 Response (已废弃，保留兼容) ---
 @Serializable
 data class RegionVideosResponse(
     val code: Int = 0,
@@ -551,7 +611,7 @@ data class RegionVideosResponse(
 
 @Serializable
 data class RegionVideosData(
-    val archives: List<PopularItem>? = null,  // 复用 PopularItem 结构
+    val archives: List<PopularItem>? = null,
     val page: RegionPage? = null
 )
 

@@ -12,37 +12,58 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /**
- * 1. 列表项进场动画 (Q弹上浮 + 交错延迟)
+ * 🔥 列表项进场动画 (Premium 非线性动画)
+ * 
+ * 特点：
+ * - 交错延迟实现波浪效果
+ * - 从下方滑入 + 缩放 + 淡入
+ * - 非线性缓动曲线 (FastOutSlowIn)
+ * - Q弹果冻回弹效果
+ * 
  * @param index: 列表项的索引，用于计算延迟时间
- * @param key: 🔥 关键参数：用于触发重置动画的键值 (通常传视频ID)
+ * @param key: 用于触发重置动画的键值 (通常传视频ID)
+ * @param initialOffsetY: 初始 Y 偏移量
  */
 fun Modifier.animateEnter(
     index: Int = 0,
-    key: Any? = Unit, // 👈 必须加上这个参数，HomeScreen 才能正常编译
-    initialOffsetY: Float = 100f
+    key: Any? = Unit,
+    initialOffsetY: Float = 80f
 ): Modifier = composed {
-    // 使用 remember(key) 确保当 key (例如视频ID) 变化时，动画状态会被重置
+    // 动画状态
     val alpha = remember(key) { Animatable(0f) }
     val translationY = remember(key) { Animatable(initialOffsetY) }
+    val scale = remember(key) { Animatable(0.85f) }
 
     LaunchedEffect(key) {
-        // 根据索引计算延迟，实现波浪效果
-        val delayMs = (index * 50L).coerceAtMost(500L)
+        // 🔥 交错延迟：每个卡片延迟 40ms，最多 300ms
+        val delayMs = (index * 40L).coerceAtMost(300L)
         delay(delayMs)
 
+        // 🔥 并行启动动画
         launch {
             alpha.animateTo(
                 targetValue = 1f,
-                animationSpec = tween(durationMillis = 400, easing = LinearEasing)
+                animationSpec = tween(
+                    durationMillis = 350,
+                    easing = FastOutSlowInEasing // 非线性缓动
+                )
             )
         }
         launch {
             translationY.animateTo(
                 targetValue = 0f,
-                // Q弹果冻效果
                 animationSpec = spring(
-                    dampingRatio = 0.6f,
-                    stiffness = Spring.StiffnessLow
+                    dampingRatio = 0.65f,    // 轻微过冲
+                    stiffness = 300f         // 适中的弹性
+                )
+            )
+        }
+        launch {
+            scale.animateTo(
+                targetValue = 1f,
+                animationSpec = spring(
+                    dampingRatio = 0.7f,     // 轻微过冲
+                    stiffness = 350f         // 稍快的回弹
                 )
             )
         }
@@ -51,6 +72,8 @@ fun Modifier.animateEnter(
     this.graphicsLayer {
         this.alpha = alpha.value
         this.translationY = translationY.value
+        this.scaleX = scale.value
+        this.scaleY = scale.value
     }
 }
 

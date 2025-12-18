@@ -87,7 +87,7 @@ fun DanmakuSettingsPanel(
                     label = "\u900f\u660e\u5ea6",
                     value = opacity,
                     valueRange = 0.3f..1f,
-                    displayText = "${(opacity * 100).toInt()}%",
+                    displayValue = { "${(it * 100).toInt()}%" },
                     onValueChange = onOpacityChange
                 )
                 
@@ -98,7 +98,7 @@ fun DanmakuSettingsPanel(
                     label = "\u5b57\u4f53\u5927\u5c0f",
                     value = fontScale,
                     valueRange = 0.5f..2f,
-                    displayText = "${(fontScale * 100).toInt()}%",
+                    displayValue = { "${(it * 100).toInt()}%" },
                     onValueChange = onFontScaleChange
                 )
                 
@@ -109,10 +109,12 @@ fun DanmakuSettingsPanel(
                     label = "\u5f39\u5e55\u901f\u5ea6",
                     value = speed,
                     valueRange = 0.5f..2f,
-                    displayText = when {
-                        speed <= 0.7f -> "\u6162"
-                        speed >= 1.5f -> "\u5feb"
-                        else -> "\u4e2d"
+                    displayValue = { v ->
+                        when {
+                            v <= 0.7f -> "\u6162"
+                            v >= 1.5f -> "\u5feb"
+                            else -> "\u4e2d"
+                        }
                     },
                     onValueChange = onSpeedChange
                 )
@@ -126,9 +128,12 @@ fun DanmakuSliderItem(
     label: String,
     value: Float,
     valueRange: ClosedFloatingPointRange<Float>,
-    displayText: String,
+    displayValue: (Float) -> String,
     onValueChange: (Float) -> Unit
 ) {
+    // 使用本地状态跟踪滑动值，确保实时更新
+    var localValue by remember(value) { mutableFloatStateOf(value) }
+    
     Column {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -141,7 +146,7 @@ fun DanmakuSliderItem(
                 fontSize = 14.sp
             )
             Text(
-                text = displayText,
+                text = displayValue(localValue),
                 color = Color(0xFFFB7299),
                 fontSize = 14.sp,
                 fontWeight = FontWeight.Medium
@@ -149,8 +154,11 @@ fun DanmakuSliderItem(
         }
         Spacer(modifier = Modifier.height(8.dp))
         Slider(
-            value = value,
-            onValueChange = onValueChange,
+            value = localValue,
+            onValueChange = { newValue ->
+                localValue = newValue
+                onValueChange(newValue)
+            },
             valueRange = valueRange,
             colors = SliderDefaults.colors(
                 thumbColor = Color(0xFFFB7299),

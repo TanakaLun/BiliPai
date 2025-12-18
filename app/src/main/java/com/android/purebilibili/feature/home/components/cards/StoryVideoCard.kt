@@ -23,6 +23,7 @@ import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.android.purebilibili.core.util.FormatUtils
 import com.android.purebilibili.core.util.iOSTapEffect
+import com.android.purebilibili.core.util.animateEnter
 import com.android.purebilibili.data.model.response.VideoItem
 
 /**
@@ -37,6 +38,7 @@ import com.android.purebilibili.data.model.response.VideoItem
 @Composable
 fun StoryVideoCard(
     video: VideoItem,
+    index: Int = 0,  // 🔥🔥 [新增] 索引用于动画延迟
     onClick: (String, Long) -> Unit
 ) {
     val coverUrl = remember(video.bvid) {
@@ -47,14 +49,16 @@ fun StoryVideoCard(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 8.dp)
+            // 🔥🔥 [新增] 进场动画 - 交错缩放+滑入
+            .animateEnter(index = index, key = video.bvid)
             .shadow(
                 elevation = 12.dp,
-                shape = RoundedCornerShape(20.dp),  // 🔥 统一圆角
+                shape = RoundedCornerShape(20.dp),
                 ambientColor = Color.Black.copy(alpha = 0.2f),
                 spotColor = Color.Black.copy(alpha = 0.25f)
             )
-            .clip(RoundedCornerShape(20.dp))  // 🔥 统一圆角
-            .background(Color.Black)  // 🔥 防止加载时露出背景
+            .clip(RoundedCornerShape(20.dp))
+            .background(Color.Black)
             .iOSTapEffect(scale = 0.98f, hapticEnabled = true) {
                 onClick(video.bvid, 0)
             }
@@ -159,21 +163,25 @@ fun StoryVideoCard(
                 
                 Spacer(modifier = Modifier.width(12.dp))
                 
-                // 播放量
-                Text(
-                    text = "${FormatUtils.formatStat(video.stat.view.toLong())}播放",
-                    color = Color.White.copy(alpha = 0.7f),
-                    fontSize = 12.sp
-                )
+                // 播放量 - 🔥 [修复] 只在有播放量时显示
+                if (video.stat.view > 0) {
+                    Text(
+                        text = "${FormatUtils.formatStat(video.stat.view.toLong())}播放",
+                        color = Color.White.copy(alpha = 0.7f),
+                        fontSize = 12.sp
+                    )
+                    
+                    Spacer(modifier = Modifier.width(8.dp))
+                }
                 
-                Spacer(modifier = Modifier.width(8.dp))
-                
-                // 弹幕
-                Text(
-                    text = "${FormatUtils.formatStat(video.stat.danmaku.toLong())}弹幕",
-                    color = Color.White.copy(alpha = 0.7f),
-                    fontSize = 12.sp
-                )
+                // 弹幕 - 🔥 [修复] 只在有弹幕时显示
+                if (video.stat.danmaku > 0) {
+                    Text(
+                        text = "${FormatUtils.formatStat(video.stat.danmaku.toLong())}弹幕",
+                        color = Color.White.copy(alpha = 0.7f),
+                        fontSize = 12.sp
+                    )
+                }
             }
         }
     }

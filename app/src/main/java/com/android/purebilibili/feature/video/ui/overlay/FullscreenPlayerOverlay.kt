@@ -54,6 +54,12 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.abs
 import androidx.compose.runtime.collectAsState
+import com.android.purebilibili.feature.video.ui.components.DanmakuSettingsPanel
+import com.android.purebilibili.feature.video.ui.components.VideoAspectRatio
+import com.android.purebilibili.feature.video.ui.components.PlaybackSpeed
+import androidx.compose.material.icons.rounded.Settings
+import androidx.compose.material.icons.rounded.Subtitles
+import androidx.compose.material.icons.rounded.SubtitlesOff
 
 private const val AUTO_HIDE_DELAY = 4000L
 
@@ -81,6 +87,20 @@ fun FullscreenPlayerOverlay(
     
     var showControls by remember { mutableStateOf(true) }
     var lastInteractionTime by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    
+    // 🔥🔥 [新增] 弹幕设置面板状态
+    var showDanmakuSettings by remember { mutableStateOf(false) }
+    
+    // 🔥 播放速度状态
+    var playbackSpeed by remember { mutableFloatStateOf(1.0f) }
+    var showSpeedMenu by remember { mutableStateOf(false) }
+    
+    // 🔥 视频比例状态
+    var aspectRatio by remember { mutableStateOf(VideoAspectRatio.FIT) }
+    var showRatioMenu by remember { mutableStateOf(false) }
+    
+    // 🔥 画质选择菜单状态
+    var showQualityMenu by remember { mutableStateOf(false) }
     
     // 手势状态
     var gestureMode by remember { mutableStateOf(FullscreenGestureMode.None) }
@@ -278,16 +298,25 @@ fun FullscreenPlayerOverlay(
         
         // 视频播放器
         player?.let { exoPlayer ->
+            // 🔥 应用播放速度
+            LaunchedEffect(playbackSpeed) {
+                exoPlayer.setPlaybackSpeed(playbackSpeed)
+            }
+            
             AndroidView(
                 factory = { ctx ->
                     PlayerView(ctx).apply {
                         this.player = exoPlayer
                         useController = false
-                        keepScreenOn = true  // 🔥 确保屏幕常亮
+                        keepScreenOn = true
                         setShowBuffering(PlayerView.SHOW_BUFFERING_WHEN_PLAYING)
+                        resizeMode = aspectRatio.resizeMode
                     }
                 },
-                update = { it.player = exoPlayer },
+                update = { playerView ->
+                    playerView.player = exoPlayer
+                    playerView.resizeMode = aspectRatio.resizeMode
+                },
                 modifier = Modifier.fillMaxSize()
             )
             
@@ -351,8 +380,23 @@ fun FullscreenPlayerOverlay(
                             fontSize = 16.sp,
                             fontWeight = FontWeight.Medium,
                             maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f)
                         )
+                        
+                        // 🔥🔥 [新增] 弹幕开关按钮
+                        IconButton(onClick = { danmakuManager.isEnabled = !danmakuManager.isEnabled }) {
+                            Icon(
+                                if (danmakuEnabled) Icons.Rounded.Subtitles else Icons.Rounded.SubtitlesOff,
+                                contentDescription = "弹幕开关",
+                                tint = if (danmakuEnabled) BiliPink else Color.White.copy(0.5f)
+                            )
+                        }
+                        
+                        // 🔥🔥 [新增] 弹幕设置按钮
+                        IconButton(onClick = { showDanmakuSettings = true }) {
+                            Icon(Icons.Rounded.Settings, "弹幕设置", tint = Color.White)
+                        }
                     }
                 }
                 
@@ -374,48 +418,148 @@ fun FullscreenPlayerOverlay(
                     )
                 }
                 
-                // 底部进度条（可拖动）
+                // 底部进度条和控制按钮
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(70.dp)
+                        .height(90.dp)
                         .align(Alignment.BottomCenter)
-                        .background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = 0.6f))))
+                        .background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = 0.7f))))
                 ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
+                    Column(
                         modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).align(Alignment.Center)
                     ) {
-                        Text(FormatUtils.formatDuration((currentPosition / 1000).toInt()), color = Color.White, fontSize = 12.sp)
-                        
-                        // 🔥 使用 Slider 替代 LinearProgressIndicator，支持拖动
-                        var isDragging by remember { mutableStateOf(false) }
-                        var dragProgress by remember { mutableFloatStateOf(0f) }
-                        
-                        Slider(
-                            value = if (isDragging) dragProgress else currentProgress,
-                            onValueChange = { newValue ->
-                                isDragging = true
-                                dragProgress = newValue
-                                lastInteractionTime = System.currentTimeMillis()
-                            },
-                            onValueChangeFinished = {
-                                isDragging = false
-                                val newPosition = (dragProgress * duration).toLong()
-                                player?.seekTo(newPosition)
-                                currentProgress = dragProgress
-                            },
-                            modifier = Modifier.weight(1f).padding(horizontal = 8.dp),
-                            colors = SliderDefaults.colors(
-                                thumbColor = MaterialTheme.colorScheme.primary,
-                                activeTrackColor = MaterialTheme.colorScheme.primary,
-                                inactiveTrackColor = Color.White.copy(alpha = 0.3f)
+                        // 进度条行
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(FormatUtils.formatDuration((currentPosition / 1000).toInt()), color = Color.White, fontSize = 12.sp)
+                            
+                            var isDragging by remember { mutableStateOf(false) }
+                            var dragProgress by remember { mutableFloatStateOf(0f) }
+                            
+                            Slider(
+                                value = if (isDragging) dragProgress else currentProgress,
+                                onValueChange = { newValue ->
+                                    isDragging = true
+                                    dragProgress = newValue
+                                    lastInteractionTime = System.currentTimeMillis()
+                                },
+                                onValueChangeFinished = {
+                                    isDragging = false
+                                    val newPosition = (dragProgress * duration).toLong()
+                                    player?.seekTo(newPosition)
+                                    currentProgress = dragProgress
+                                },
+                                modifier = Modifier.weight(1f).padding(horizontal = 8.dp),
+                                colors = SliderDefaults.colors(
+                                    thumbColor = MaterialTheme.colorScheme.primary,
+                                    activeTrackColor = MaterialTheme.colorScheme.primary,
+                                    inactiveTrackColor = Color.White.copy(alpha = 0.3f)
+                                )
                             )
-                        )
+                            
+                            Text(FormatUtils.formatDuration((duration / 1000).toInt()), color = Color.White, fontSize = 12.sp)
+                        }
                         
-                        Text(FormatUtils.formatDuration((duration / 1000).toInt()), color = Color.White, fontSize = 12.sp)
+                        Spacer(modifier = Modifier.height(4.dp))
+                        
+                        // 🔥 底部控制按钮行
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.End,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            // 倍速按钮
+                            FullscreenControlButton(
+                                text = PlaybackSpeed.formatSpeed(playbackSpeed),
+                                isHighlighted = playbackSpeed != 1.0f,
+                                onClick = { showSpeedMenu = true }
+                            )
+                            Spacer(modifier = Modifier.width(12.dp))
+                            // 比例按钮
+                            FullscreenControlButton(
+                                text = aspectRatio.displayName,
+                                isHighlighted = aspectRatio != VideoAspectRatio.FIT,
+                                onClick = { showRatioMenu = true }
+                            )
+                        }
                     }
                 }
+            }
+        }
+        
+        // 🔥🔥 [新增] 弹幕设置面板
+        if (showDanmakuSettings) {
+            // 🔥 使用本地状态确保滑动条可以更新
+            var localOpacity by remember { mutableFloatStateOf(danmakuManager.opacity) }
+            var localFontScale by remember { mutableFloatStateOf(danmakuManager.fontScale) }
+            var localSpeed by remember { mutableFloatStateOf(danmakuManager.speedFactor) }
+            
+            DanmakuSettingsPanel(
+                opacity = localOpacity,
+                fontScale = localFontScale,
+                speed = localSpeed,
+                onOpacityChange = { 
+                    localOpacity = it
+                    danmakuManager.opacity = it 
+                },
+                onFontScaleChange = { 
+                    localFontScale = it
+                    danmakuManager.fontScale = it 
+                },
+                onSpeedChange = { 
+                    localSpeed = it
+                    danmakuManager.speedFactor = it 
+                },
+                onDismiss = { showDanmakuSettings = false }
+            )
+        }
+        
+        // 🔥 播放速度选择菜单
+        if (showSpeedMenu) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.5f))
+                    .pointerInput(Unit) {
+                        detectTapGestures { showSpeedMenu = false }
+                    },
+                contentAlignment = Alignment.Center
+            ) {
+                com.android.purebilibili.feature.video.ui.components.SpeedSelectionMenu(
+                    currentSpeed = playbackSpeed,
+                    onSpeedSelected = { speed ->
+                        playbackSpeed = speed
+                        showSpeedMenu = false
+                        lastInteractionTime = System.currentTimeMillis()
+                    },
+                    onDismiss = { showSpeedMenu = false }
+                )
+            }
+        }
+        
+        // 🔥 视频比例选择菜单
+        if (showRatioMenu) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.5f))
+                    .pointerInput(Unit) {
+                        detectTapGestures { showRatioMenu = false }
+                    },
+                contentAlignment = Alignment.Center
+            ) {
+                com.android.purebilibili.feature.video.ui.components.AspectRatioMenu(
+                    currentRatio = aspectRatio,
+                    onRatioSelected = { ratio ->
+                        aspectRatio = ratio
+                        showRatioMenu = false
+                        lastInteractionTime = System.currentTimeMillis()
+                    },
+                    onDismiss = { showRatioMenu = false }
+                )
             }
         }
     }
@@ -464,5 +608,29 @@ private fun GestureIndicator(
                 else -> {}
             }
         }
+    }
+}
+
+/**
+ * 🔥 全屏底部控制按钮
+ */
+@Composable
+private fun FullscreenControlButton(
+    text: String,
+    isHighlighted: Boolean = false,
+    onClick: () -> Unit
+) {
+    Surface(
+        onClick = onClick,
+        shape = RoundedCornerShape(6.dp),
+        color = Color.Black.copy(alpha = 0.5f)
+    ) {
+        Text(
+            text = text,
+            color = if (isHighlighted) BiliPink else Color.White,
+            fontSize = 12.sp,
+            fontWeight = if (isHighlighted) FontWeight.Bold else FontWeight.Normal,
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+        )
     }
 }

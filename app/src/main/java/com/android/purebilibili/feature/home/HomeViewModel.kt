@@ -46,7 +46,8 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                 videos = emptyList(),
                 liveRooms = emptyList(),  // 🔥 清空直播列表
                 isLoading = true,
-                error = null
+                error = null,
+                displayedTabIndex = category.ordinal  // 🔥🔥 [新增] 同步更新标签页索引
             )
             refreshIdx = 0
             popularPage = 1
@@ -54,6 +55,11 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
             hasMoreLiveData = true  // 🔥 重置分页标志
             fetchData(isLoadMore = false)
         }
+    }
+    
+    // 🔥🔥 [新增] 更新显示的标签页索引（用于特殊分类，不改变内容只更新标签高亮）
+    fun updateDisplayedTabIndex(index: Int) {
+        _uiState.value = _uiState.value.copy(displayedTabIndex = index)
     }
     
     // 🔥🔥 [新增] 切换直播子分类

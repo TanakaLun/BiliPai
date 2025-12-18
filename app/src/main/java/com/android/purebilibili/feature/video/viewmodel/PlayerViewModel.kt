@@ -16,6 +16,8 @@ import com.android.purebilibili.data.model.VideoLoadError
 import com.android.purebilibili.data.model.response.*
 import com.android.purebilibili.data.repository.SponsorBlockRepository
 import com.android.purebilibili.data.repository.VideoRepository
+import com.android.purebilibili.feature.video.controller.QualityManager
+import com.android.purebilibili.feature.video.controller.QualityPermissionResult
 import com.android.purebilibili.feature.video.usecase.*
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
@@ -72,6 +74,7 @@ class PlayerViewModel : ViewModel() {
     private val playbackUseCase = VideoPlaybackUseCase()
     private val interactionUseCase = VideoInteractionUseCase()
     private val sponsorBlockUseCase = SponsorBlockUseCase()
+    private val qualityManager = QualityManager()
     
     // State
     private val _uiState = MutableStateFlow<PlayerUiState>(PlayerUiState.Loading.Initial)
@@ -289,8 +292,34 @@ class PlayerViewModel : ViewModel() {
     
     fun changeQuality(qualityId: Int, currentPos: Long) {
         val current = _uiState.value as? PlayerUiState.Success ?: return
-        if (current.isQualitySwitching) { toast("\u6b63\u5728\u5207\u6362\u4e2d..."); return }
-        if (current.currentQuality == qualityId) { toast("\u5df2\u662f\u5f53\u524d\u6e05\u6670\u5ea6"); return }
+        if (current.isQualitySwitching) { toast("正在切换中..."); return }
+        if (current.currentQuality == qualityId) { toast("已是当前清晰度"); return }
+        
+        // 🔥🔥 [新增] 权限检查
+        val permissionResult = qualityManager.checkQualityPermission(
+            qualityId, current.isLoggedIn, current.isVip
+        )
+        
+        when (permissionResult) {
+            is QualityPermissionResult.RequiresVip -> {
+                toast("${permissionResult.qualityLabel} 需要大会员")
+                // 自动降级到最高可用画质
+                val fallbackQuality = qualityManager.getMaxAvailableQuality(
+                    current.qualityIds, current.isLoggedIn, current.isVip
+                )
+                if (fallbackQuality != current.currentQuality) {
+                    changeQuality(fallbackQuality, currentPos)
+                }
+                return
+            }
+            is QualityPermissionResult.RequiresLogin -> {
+                toast("${permissionResult.qualityLabel} 需要登录")
+                return
+            }
+            is QualityPermissionResult.Permitted -> {
+                // 继续切换
+            }
+        }
         
         _uiState.value = current.copy(isQualitySwitching = true, requestedQuality = qualityId)
         
@@ -304,10 +333,10 @@ class PlayerViewModel : ViewModel() {
                     currentQuality = result.actualQuality, isQualitySwitching = false, requestedQuality = null
                 )
                 val label = current.qualityLabels.getOrNull(current.qualityIds.indexOf(result.actualQuality)) ?: "${result.actualQuality}"
-                toast(if (result.wasFallback) "\u26a0\ufe0f \u5df2\u5207\u6362\u81f3 $label" else "\u2713 \u5df2\u5207\u6362\u81f3 $label")
+                toast(if (result.wasFallback) "⚠️ 已切换至 $label" else "✓ 已切换至 $label")
             } else {
                 _uiState.value = current.copy(isQualitySwitching = false, requestedQuality = null)
-                toast("\u6e05\u6670\u5ea6\u5207\u6362\u5931\u8d25")
+                toast("清晰度切换失败")
             }
         }
     }
