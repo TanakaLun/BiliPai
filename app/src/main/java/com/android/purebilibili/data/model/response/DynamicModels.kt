@@ -32,7 +32,8 @@ data class DynamicItem(
     val id_str: String = "",
     val type: String = "", // DYNAMIC_TYPE_AV, DYNAMIC_TYPE_DRAW, DYNAMIC_TYPE_WORD, DYNAMIC_TYPE_FORWARD
     val visible: Boolean = true,
-    val modules: DynamicModules = DynamicModules()
+    val modules: DynamicModules = DynamicModules(),
+    val orig: DynamicItem? = null  // 🔥 转发动态的原始内容
 )
 
 // --- 动态模块集合 ---
@@ -104,12 +105,19 @@ data class EmojiInfo(
     val text: String = ""
 )
 
-// --- 主要内容 (视频/图片) ---
+// --- 主要内容 (视频/图片/直播) ---
 @Serializable
 data class DynamicMajor(
-    val type: String = "", // MAJOR_TYPE_ARCHIVE, MAJOR_TYPE_DRAW, MAJOR_TYPE_NONE
+    val type: String = "", // MAJOR_TYPE_ARCHIVE, MAJOR_TYPE_DRAW, MAJOR_TYPE_LIVE_RCMD, MAJOR_TYPE_NONE
     val archive: ArchiveMajor? = null, // 视频
-    val draw: DrawMajor? = null // 图片
+    val draw: DrawMajor? = null, // 图片
+    val live_rcmd: LiveRcmdMajor? = null // 🔥 直播
+)
+
+// 🔥 直播推荐
+@Serializable
+data class LiveRcmdMajor(
+    val content: String = "" // JSON string，需要解析
 )
 
 @Serializable

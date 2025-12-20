@@ -241,17 +241,14 @@ fun VideoPlayerSection(
                     )
                 }
             }
-            // 🧪 点击/双击手势在拖拽之后处理
-            .pointerInput(doubleTapLikeEnabled, uiState) {
+            // 🔥 点击/双击手势在拖拽之后处理
+            .pointerInput(Unit) {
                 detectTapGestures(
                     onTap = { showControls = !showControls },
                     onDoubleTap = { offset ->
-                        // 🧪 双击点赞
-                        com.android.purebilibili.core.util.Logger.d("VideoPlayerSection", "🧪 DoubleTap detected! enabled=$doubleTapLikeEnabled")
-                        if (doubleTapLikeEnabled && uiState is PlayerUiState.Success && uiState.isLoggedIn) {
-                            com.android.purebilibili.core.util.Logger.d("VideoPlayerSection", "🧪 Calling onDoubleTapLike!")
-                            onDoubleTapLike()
-                        }
+                        // 🔥 双击暂停/播放（用户体验改进）
+                        com.android.purebilibili.core.util.Logger.d("VideoPlayerSection", "🔥 DoubleTap: toggle play/pause")
+                        playerState.player.playWhenReady = !playerState.player.playWhenReady
                     }
                 )
             }

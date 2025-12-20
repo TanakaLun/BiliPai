@@ -69,6 +69,7 @@ class PureApplication : Application(), ImageLoaderFactory, ComponentCallbacks2 {
         // 🔥 关键初始化（同步，必须在启动时完成）
         NetworkModule.init(this)
         TokenManager.init(this)
+        com.android.purebilibili.feature.download.DownloadManager.init(this)  // 🔥 下载管理器
         createNotificationChannel()
         
         // 🔥 初始化 Firebase Crashlytics

@@ -62,7 +62,8 @@ fun SettingsScreen(
     onBack: () -> Unit,
     onOpenSourceLicensesClick: () -> Unit,
     onAppearanceClick: () -> Unit = {},    // 🔥 外观设置
-    onPlaybackClick: () -> Unit = {}       // 🔥 播放设置
+    onPlaybackClick: () -> Unit = {},      // 🔥 播放设置
+    onPermissionClick: () -> Unit = {}     // 🔐 权限管理
 ) {
     val context = LocalContext.current
     val uriHandler = LocalUriHandler.current
@@ -168,9 +169,16 @@ fun SettingsScreen(
                         onClick = onPlaybackClick,
                         iconTint = iOSGreen
                     )
+                    Divider()
+                    SettingClickableItem(
+                        icon = Icons.Outlined.Security,
+                        title = "权限管理",
+                        value = "查看应用权限",
+                        onClick = onPermissionClick,
+                        iconTint = iOSTeal
+                    )
                 }
             }
-            
             item { SettingsSectionTitle("高级选项") }
             item {
                 // 🔥 获取崩溃追踪和 Analytics 设置状态

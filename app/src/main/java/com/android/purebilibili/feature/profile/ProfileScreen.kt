@@ -62,7 +62,9 @@ fun ProfileScreen(
     onLogoutSuccess: () -> Unit,
     onSettingsClick: () -> Unit,
     onHistoryClick: () -> Unit,
-    onFavoriteClick: () -> Unit
+    onFavoriteClick: () -> Unit,
+    onFollowingClick: (Long) -> Unit = {},  // 🔥 关注列表点击
+    onDownloadClick: () -> Unit = {}  // 🔥 离线缓存点击
 ) {
     val state by viewModel.uiState.collectAsState()
     val context = LocalContext.current
@@ -148,7 +150,9 @@ fun ProfileScreen(
                             onLogoutSuccess()
                         },
                         onHistoryClick = onHistoryClick,
-                        onFavoriteClick = onFavoriteClick
+                        onFavoriteClick = onFavoriteClick,
+                        onFollowingClick = { onFollowingClick(s.user.mid) },  // 🔥 传递用户 mid
+                        onDownloadClick = onDownloadClick
                     )
                 }
             }
@@ -274,16 +278,18 @@ fun UserProfileContent(
     user: UserState,
     onLogout: () -> Unit,
     onHistoryClick: () -> Unit,
-    onFavoriteClick: () -> Unit
+    onFavoriteClick: () -> Unit,
+    onFollowingClick: () -> Unit = {},  // 🔥 关注列表点击
+    onDownloadClick: () -> Unit = {}    // 🔥 离线缓存点击
 ) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(bottom = 32.dp)
     ) {
         item { UserInfoSection(user) }
-        item { UserStatsSection(user) }
+        item { UserStatsSection(user, onFollowingClick) }
         item { VipBannerSection(user) }
-        item { ServicesSection(onHistoryClick, onFavoriteClick) }
+        item { ServicesSection(onHistoryClick, onFavoriteClick, onDownloadClick) }
         item {
             Box(modifier = Modifier.fillMaxWidth().padding(top = 24.dp), contentAlignment = Alignment.Center) {
                 TextButton(onClick = onLogout, colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.onSurfaceVariant)) {
@@ -348,7 +354,7 @@ fun LevelTag(level: Int) {
 }
 
 @Composable
-fun UserStatsSection(user: UserState) {
+fun UserStatsSection(user: UserState, onFollowingClick: () -> Unit = {}) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -358,14 +364,19 @@ fun UserStatsSection(user: UserState) {
         horizontalArrangement = Arrangement.SpaceAround
     ) {
         StatItem(count = FormatUtils.formatStat(user.dynamic.toLong()), label = "动态")
-        StatItem(count = FormatUtils.formatStat(user.following.toLong()), label = "关注")
+        StatItem(count = FormatUtils.formatStat(user.following.toLong()), label = "关注", onClick = onFollowingClick)
         StatItem(count = FormatUtils.formatStat(user.follower.toLong()), label = "粉丝")
     }
 }
 
 @Composable
-fun StatItem(count: String, label: String) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+fun StatItem(count: String, label: String, onClick: (() -> Unit)? = null) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = if (onClick != null) {
+            Modifier.clickable { onClick() }
+        } else Modifier
+    ) {
         // 🔥 修复：数字和标签颜色
         Text(text = count, fontWeight = FontWeight.Bold, fontSize = 16.sp, color = MaterialTheme.colorScheme.onSurface)
         Text(text = label, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -396,7 +407,8 @@ fun VipBannerSection(user: UserState) {
 @Composable
 fun ServicesSection(
     onHistoryClick: () -> Unit,
-    onFavoriteClick: () -> Unit
+    onFavoriteClick: () -> Unit,
+    onDownloadClick: () -> Unit = {}  // 🔥 离线缓存
 ) {
     Column(
         modifier = Modifier
@@ -415,7 +427,7 @@ fun ServicesSection(
             modifier = Modifier.padding(16.dp)
         )
 
-        ServiceItem(Icons.Default.Download, "离线缓存", BiliPink) { /* TODO */ }
+        ServiceItem(Icons.Default.Download, "离线缓存", BiliPink, onClick = onDownloadClick)
         Divider(thickness = 0.5.dp, color = MaterialTheme.colorScheme.surfaceVariant, modifier = Modifier.padding(start = 56.dp))
 
         ServiceItem(Icons.Default.History, "历史记录", iOSBlue, onClick = onHistoryClick)

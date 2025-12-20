@@ -128,6 +128,7 @@ dependencies {
 
     // --- 3. Image (图片加载) ---
     implementation("io.coil-kt:coil-compose:2.6.0")
+    implementation("io.coil-kt:coil-gif:2.6.0")  // 🔥 GIF 动图支持
     
     // --- 3.1 Palette (颜色提取 - 动态取色) ---
     implementation("androidx.palette:palette-ktx:1.0.0")
@@ -161,6 +162,8 @@ dependencies {
     implementation("com.github.bilibili:DanmakuFlameMaster:0.9.25")
     // 🔥 新版弹幕引擎 (ByteDance DanmakuRenderEngine - 高性能)
     implementation("com.github.bytedance:DanmakuRenderEngine:v0.1.0")
+    
+    // 注：FFmpegKit 已于 2025 年停止维护，改用 ExoPlayer 直接播放分离音视频
 
     // --- 6. Database (Room 数据库) ---
     val roomVersion = "2.6.1"

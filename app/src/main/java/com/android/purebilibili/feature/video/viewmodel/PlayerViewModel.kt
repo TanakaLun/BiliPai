@@ -99,6 +99,10 @@ class PlayerViewModel : ViewModel() {
     val currentSponsorSegment = sponsorBlockUseCase.currentSegment
     val showSkipButton = sponsorBlockUseCase.showSkipButton
     
+    // 🔥 Download state
+    private val _downloadProgress = MutableStateFlow(-1f)
+    val downloadProgress = _downloadProgress.asStateFlow()
+    
     // Internal state
     private var currentBvid = ""
     private var currentCid = 0L
@@ -287,6 +291,102 @@ class PlayerViewModel : ViewModel() {
     
     fun dismissLikeBurst() { _likeBurstVisible.value = false }
     fun dismissTripleCelebration() { _tripleCelebrationVisible.value = false }
+    
+    // ========== Download ==========
+    
+    // 🔥 下载对话框状态
+    private val _showDownloadDialog = MutableStateFlow(false)
+    val showDownloadDialog = _showDownloadDialog.asStateFlow()
+    
+    fun openDownloadDialog() {
+        val current = _uiState.value as? PlayerUiState.Success ?: return
+        
+        // 检查是否已下载
+        val existingTask = com.android.purebilibili.feature.download.DownloadManager.getTask(currentBvid, currentCid)
+        if (existingTask != null) {
+            if (existingTask.isComplete) {
+                toast("视频已缓存")
+                return
+            }
+            if (existingTask.isDownloading) {
+                toast("正在下载中...")
+                return
+            }
+        }
+        
+        _showDownloadDialog.value = true
+    }
+    
+    fun closeDownloadDialog() {
+        _showDownloadDialog.value = false
+    }
+    
+    fun downloadWithQuality(qualityId: Int) {
+        val current = _uiState.value as? PlayerUiState.Success ?: return
+        _showDownloadDialog.value = false
+        
+        viewModelScope.launch {
+            // 如果选择的画质不同，需要获取对应画质的 URL
+            val videoUrl: String
+            val audioUrl: String?
+            val qualityDesc: String
+            
+            if (qualityId == current.currentQuality) {
+                // 使用当前画质
+                videoUrl = current.playUrl
+                audioUrl = current.audioUrl
+                qualityDesc = current.qualityLabels.getOrNull(
+                    current.qualityIds.indexOf(qualityId)
+                ) ?: "${qualityId}P"
+            } else {
+                // 从缓存或 API 获取指定画质的 URL
+                val dashVideo = current.cachedDashVideos.find { it.id == qualityId }
+                val dashAudio = current.cachedDashAudios.firstOrNull()
+                
+                if (dashVideo != null) {
+                    videoUrl = dashVideo.getValidUrl() ?: current.playUrl
+                    audioUrl = dashAudio?.getValidUrl() ?: current.audioUrl
+                    qualityDesc = current.qualityLabels.getOrNull(
+                        current.qualityIds.indexOf(qualityId)
+                    ) ?: "${qualityId}P"
+                } else {
+                    // 使用当前画质
+                    videoUrl = current.playUrl
+                    audioUrl = current.audioUrl
+                    qualityDesc = current.qualityLabels.getOrNull(
+                        current.qualityIds.indexOf(current.currentQuality)
+                    ) ?: "${current.currentQuality}P"
+                }
+            }
+            
+            // 创建下载任务
+            val task = com.android.purebilibili.feature.download.DownloadTask(
+                bvid = currentBvid,
+                cid = currentCid,
+                title = current.info.title,
+                cover = current.info.pic,
+                ownerName = current.info.owner.name,
+                ownerFace = current.info.owner.face,
+                duration = 0,
+                quality = qualityId,
+                qualityDesc = qualityDesc,
+                videoUrl = videoUrl,
+                audioUrl = audioUrl ?: ""
+            )
+            
+            val added = com.android.purebilibili.feature.download.DownloadManager.addTask(task)
+            if (added) {
+                toast("开始下载: ${current.info.title} [$qualityDesc]")
+                // 开始监听下载进度
+                com.android.purebilibili.feature.download.DownloadManager.tasks.collect { tasks ->
+                    val downloadTask = tasks[task.id]
+                    _downloadProgress.value = downloadTask?.progress ?: -1f
+                }
+            } else {
+                toast("下载任务已存在")
+            }
+        }
+    }
     
     // ========== Quality ==========
     

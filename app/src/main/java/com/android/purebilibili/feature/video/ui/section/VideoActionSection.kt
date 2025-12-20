@@ -50,11 +50,13 @@ fun ActionButtonsRow(
     isFavorited: Boolean = false,
     isLiked: Boolean = false,
     coinCount: Int = 0,
+    downloadProgress: Float = -1f,  // 🔥 -1 = 未下载, 0-1 = 进度, 1 = 已完成
     onFavoriteClick: () -> Unit = {},
     onLikeClick: () -> Unit = {},
     onCoinClick: () -> Unit = {},
     onTripleClick: () -> Unit = {},
-    onCommentClick: () -> Unit
+    onCommentClick: () -> Unit,
+    onDownloadClick: () -> Unit = {}  // 🔥 下载点击
 ) {
     Row(
         modifier = Modifier
@@ -90,24 +92,30 @@ fun ActionButtonsRow(
             activeColor = Color(0xFFFFC107),
             onClick = onFavoriteClick
         )
+        
+        // 🔥 Download
+        val downloadText = when {
+            downloadProgress >= 1f -> "已缓存"
+            downloadProgress >= 0f -> "${(downloadProgress * 100).toInt()}%"
+            else -> "缓存"
+        }
+        val isDownloaded = downloadProgress >= 1f
+        val isDownloading = downloadProgress in 0f..0.99f
+        BiliActionButton(
+            icon = if (isDownloaded) Icons.Filled.DownloadDone else Icons.Outlined.Download,
+            text = downloadText,
+            isActive = isDownloaded || isDownloading,
+            activeColor = if (isDownloaded) Color(0xFF4CAF50) else Color(0xFF2196F3),
+            onClick = onDownloadClick
+        )
 
         // Triple action
         BiliActionButton(
             icon = Icons.Filled.Favorite,
-            text = "\u4e09\u8fde",
+            text = "三连",
             isActive = false,
             activeColor = Color(0xFFE91E63),
             onClick = onTripleClick
-        )
-
-        // Comment
-        val replyCount = runCatching { info.stat.reply }.getOrDefault(0)
-        BiliActionButton(
-            icon = Icons.Outlined.ChatBubbleOutline,
-            text = FormatUtils.formatStat(replyCount.toLong()),
-            isActive = false,
-            activeColor = MaterialTheme.colorScheme.primary,
-            onClick = onCommentClick
         )
     }
 }

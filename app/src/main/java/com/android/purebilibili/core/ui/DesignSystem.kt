@@ -110,12 +110,16 @@ fun Modifier.shimmer(
     durationMillis: Int = 1000,  // 🔥 更快的动画周期
     delayMillis: Int = 0
 ): Modifier = composed {
+    // 🔥 使用 MaterialTheme 颜色支持深色模式
+    val baseColor = MaterialTheme.colorScheme.surfaceVariant
+    val highlightColor = MaterialTheme.colorScheme.surface
+    
     val shimmerColors = listOf(
-        Color(0xFFE8E8E8),         // 更亮的基础色
-        Color(0xFFF8F8F8),         // 高亮色
-        Color(0xFFFFFFFF),         // 白色峰值
-        Color(0xFFF8F8F8),
-        Color(0xFFE8E8E8)
+        baseColor,
+        highlightColor,
+        highlightColor.copy(alpha = 0.9f),
+        highlightColor,
+        baseColor
     )
     
     val transition = rememberInfiniteTransition(label = "shimmer")
@@ -170,11 +174,14 @@ fun VideoCardSkeleton(
 ) {
     val delay = index * 80  // 每个卡片延迟 80ms
     
+    // 🔥 使用 MaterialTheme 颜色支持深色模式
+    val cardBackground = MaterialTheme.colorScheme.surfaceVariant
+    
     Column(
         modifier = modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(BiliDesign.Radius.md))
-            .background(Color(0xFFF5F5F5))  // 🔥 添加背景
+            .background(cardBackground)  // 🔥 使用主题色
             .padding(bottom = BiliDesign.Spacing.sm)
     ) {
         // 封面 - 使用正确的宽高比

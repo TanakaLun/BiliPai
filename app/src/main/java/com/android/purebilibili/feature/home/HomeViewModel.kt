@@ -128,6 +128,12 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
             return
         }
         
+        // 🔥🔥 关注动态分类单独处理
+        if (currentCategory == HomeCategory.FOLLOW) {
+            fetchFollowFeed(isLoadMore)
+            return
+        }
+        
         // 🔥 视频类分类处理
         val videoResult = when (currentCategory) {
             HomeCategory.RECOMMEND -> VideoRepository.getHomeVideos(refreshIdx)
@@ -170,6 +176,85 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                 error = if (!isLoadMore && _uiState.value.videos.isEmpty()) error.message ?: "网络错误" else null
             )
         }
+    }
+    
+    // 🔥🔥 [新增] 获取关注动态列表
+    private suspend fun fetchFollowFeed(isLoadMore: Boolean) {
+        if (!isLoadMore) {
+            fetchUserInfo()
+            com.android.purebilibili.data.repository.DynamicRepository.resetPagination()
+        }
+        
+        val result = com.android.purebilibili.data.repository.DynamicRepository.getDynamicFeed(!isLoadMore)
+        
+        if (isLoadMore) delay(100)
+        
+        result.onSuccess { items ->
+            // 🔥 将 DynamicItem 转换为 VideoItem（只保留视频类型）
+            val videos = items.mapNotNull { item ->
+                val archive = item.modules.module_dynamic?.major?.archive
+                if (archive != null && archive.bvid.isNotEmpty()) {
+                    com.android.purebilibili.data.model.response.VideoItem(
+                        bvid = archive.bvid,
+                        title = archive.title,
+                        pic = archive.cover,
+                        duration = parseDurationText(archive.duration_text),
+                        owner = com.android.purebilibili.data.model.response.Owner(
+                            mid = item.modules.module_author?.mid ?: 0,
+                            name = item.modules.module_author?.name ?: "",
+                            face = item.modules.module_author?.face ?: ""
+                        ),
+                        stat = com.android.purebilibili.data.model.response.Stat(
+                            view = parseStatText(archive.stat.play)
+                        )
+                    )
+                } else null
+            }
+            
+            if (videos.isNotEmpty()) {
+                _uiState.value = _uiState.value.copy(
+                    videos = if (isLoadMore) _uiState.value.videos + videos else videos,
+                    liveRooms = emptyList(),
+                    isLoading = false,
+                    error = null
+                )
+            } else {
+                _uiState.value = _uiState.value.copy(
+                    isLoading = false,
+                    error = if (!isLoadMore && _uiState.value.videos.isEmpty()) "暂无关注动态，请先关注一些UP主" else null
+                )
+            }
+        }.onFailure { error ->
+            _uiState.value = _uiState.value.copy(
+                isLoading = false,
+                error = if (!isLoadMore && _uiState.value.videos.isEmpty()) error.message ?: "请先登录" else null
+            )
+        }
+    }
+    
+    // 🔥 解析时长文本 "10:24" -> 624 秒
+    private fun parseDurationText(text: String): Int {
+        val parts = text.split(":")
+        return try {
+            when (parts.size) {
+                2 -> parts[0].toInt() * 60 + parts[1].toInt()
+                3 -> parts[0].toInt() * 3600 + parts[1].toInt() * 60 + parts[2].toInt()
+                else -> 0
+            }
+        } catch (e: Exception) { 0 }
+    }
+    
+    // 🔥 解析统计文本 "123.4万" -> 1234000
+    private fun parseStatText(text: String): Int {
+        return try {
+            if (text.contains("万")) {
+                (text.replace("万", "").toFloat() * 10000).toInt()
+            } else if (text.contains("亿")) {
+                (text.replace("亿", "").toFloat() * 100000000).toInt()
+            } else {
+                text.toIntOrNull() ?: 0
+            }
+        } catch (e: Exception) { 0 }
     }
     
     // 🔥🔥 [新增] 获取直播间列表（支持关注/热门切换）

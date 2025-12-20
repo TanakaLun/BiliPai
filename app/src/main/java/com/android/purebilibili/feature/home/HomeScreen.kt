@@ -416,11 +416,22 @@ fun HomeScreen(
                 .haze(state = hazeState)  // 🔥 Haze 源：整个内容区域
         ) {
             if (state.isLoading && state.videos.isEmpty() && state.liveRooms.isEmpty()) {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    CupertinoActivityIndicator(
-                        modifier = Modifier.size(32.dp),
-                        color = MaterialTheme.colorScheme.primary
-                    )
+                // 🔥 首次加载改为骨架屏
+                LazyVerticalGrid(
+                    columns = GridCells.Fixed(gridColumns),
+                    contentPadding = PaddingValues(
+                        top = 156.dp,
+                        bottom = if (isBottomBarFloating) 100.dp else padding.calculateBottomPadding() + 20.dp,
+                        start = 8.dp,
+                        end = 8.dp
+                    ),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.fillMaxSize()
+                ) {
+                    items(8) { index ->
+                        VideoCardSkeleton(index = index)
+                    }
                 }
             } else if (state.isLoading && state.videos.isEmpty()) {
                  // 骨架屏 - 使用 LazyVerticalGrid 显示多个骨架卡片
@@ -467,7 +478,7 @@ fun HomeScreen(
                             isRefreshing = isRefreshing,
                             modifier = Modifier
                                 .align(Alignment.TopCenter)
-                                .padding(top = 120.dp)  // 🔥 在 Header 下方显示
+                                .padding(top = 100.dp)  // 🔥 刷新提示位置
                         )
                     }
                 ) {

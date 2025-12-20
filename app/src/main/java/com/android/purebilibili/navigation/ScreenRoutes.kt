@@ -11,6 +11,16 @@ sealed class ScreenRoutes(val route: String) {
     object History : ScreenRoutes("history")
     object Favorite : ScreenRoutes("favorite")
     
+    // 🔥 关注列表页面
+    object Following : ScreenRoutes("following/{mid}") {
+        fun createRoute(mid: Long): String {
+            return "following/$mid"
+        }
+    }
+    
+    // 🔥 离线缓存列表
+    object DownloadList : ScreenRoutes("download_list")
+    
     // 🔥 动态页面
     object Dynamic : ScreenRoutes("dynamic")
 
@@ -20,6 +30,7 @@ sealed class ScreenRoutes(val route: String) {
     // 🔥 二级设置页面
     object AppearanceSettings : ScreenRoutes("appearance_settings")
     object PlaybackSettings : ScreenRoutes("playback_settings")
+    object PermissionSettings : ScreenRoutes("permission_settings")  // 🔐 权限管理
 
     object VideoPlayer : ScreenRoutes("video_player/{bvid}?cid={cid}") {
         fun createRoute(bvid: String, cid: Long = 0): String {

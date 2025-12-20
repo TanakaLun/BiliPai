@@ -475,6 +475,9 @@ fun VideoDetailScreen(
                                 // 🔥 计算当前分P索引
                                 val currentPageIndex = success.info.pages.indexOfFirst { it.cid == success.info.cid }.coerceAtLeast(0)
                                 
+                                // 🔥 下载进度
+                                val downloadProgress by viewModel.downloadProgress.collectAsState()
+                                
                                 VideoContentSection(
                                     info = success.info,
                                     relatedVideos = success.related,
@@ -487,6 +490,7 @@ fun VideoDetailScreen(
                                     isLiked = success.isLiked,
                                     coinCount = success.coinCount,
                                     currentPageIndex = currentPageIndex,
+                                    downloadProgress = downloadProgress,
                                     onFollowClick = { viewModel.toggleFollow() },
                                     onFavoriteClick = { viewModel.toggleFavorite() },
                                     onLikeClick = { viewModel.toggleLike() },
@@ -496,7 +500,8 @@ fun VideoDetailScreen(
                                     onUpClick = onUpClick,
                                     onRelatedVideoClick = { vid -> viewModel.loadVideo(vid) },
                                     onSubReplyClick = { commentViewModel.openSubReply(it) },
-                                    onLoadMoreReplies = { commentViewModel.loadComments() }
+                                    onLoadMoreReplies = { commentViewModel.loadComments() },
+                                    onDownloadClick = { viewModel.openDownloadDialog() }
                                 )
                             }
 
@@ -557,6 +562,26 @@ fun VideoDetailScreen(
             onDismiss = { viewModel.closeCoinDialog() },
             onConfirm = { count, alsoLike -> viewModel.doCoin(count, alsoLike) }
         )
+        
+        // 🔥🔥 [新增] 下载画质选择对话框
+        val showDownloadDialog by viewModel.showDownloadDialog.collectAsState()
+        val successForDownload = uiState as? PlayerUiState.Success
+        if (showDownloadDialog && successForDownload != null) {
+            // 🔥 按画质从高到低排序（qualityId 越大画质越高）
+            val sortedQualityOptions = successForDownload.qualityIds
+                .zip(successForDownload.qualityLabels)
+                .sortedByDescending { it.first }
+            // 🔥 默认选中最高画质
+            val highestQuality = sortedQualityOptions.firstOrNull()?.first ?: successForDownload.currentQuality
+            
+            com.android.purebilibili.feature.download.DownloadQualityDialog(
+                title = successForDownload.info.title,
+                qualityOptions = sortedQualityOptions,
+                currentQuality = highestQuality,  // 默认选中最高画质
+                onQualitySelected = { viewModel.downloadWithQuality(it) },
+                onDismiss = { viewModel.closeDownloadDialog() }
+            )
+        }
         
         // 🔥 评论二级弹窗
         if (subReplyState.visible) {
@@ -647,6 +672,7 @@ fun VideoContentSection(
     isLiked: Boolean,
     coinCount: Int,
     currentPageIndex: Int,
+    downloadProgress: Float = -1f,  // 🔥 下载进度
     onFollowClick: () -> Unit,
     onFavoriteClick: () -> Unit,
     onLikeClick: () -> Unit,
@@ -656,7 +682,8 @@ fun VideoContentSection(
     onUpClick: (Long) -> Unit,
     onRelatedVideoClick: (String) -> Unit,
     onSubReplyClick: (ReplyItem) -> Unit,
-    onLoadMoreReplies: () -> Unit
+    onLoadMoreReplies: () -> Unit,
+    onDownloadClick: () -> Unit = {}  // 🔥 下载点击
 ) {
     val listState = rememberLazyListState()
     val coroutineScope = rememberCoroutineScope()
@@ -694,11 +721,13 @@ fun VideoContentSection(
                 isFavorited = isFavorited,
                 isLiked = isLiked,
                 coinCount = coinCount,
+                downloadProgress = downloadProgress,
                 onFavoriteClick = onFavoriteClick,
                 onLikeClick = onLikeClick,
                 onCoinClick = onCoinClick,
-                onTripleClick = onTripleClick
-                // 🔥🔥 [删除] onCommentClick 已移除，因下方有评论 Tab
+                onTripleClick = onTripleClick,
+                onCommentClick = {},  // 已有评论 Tab
+                onDownloadClick = onDownloadClick
             )
         }
 

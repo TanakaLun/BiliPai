@@ -241,7 +241,9 @@ fun AppNavigation(
                 onLogoutSuccess = { homeViewModel.refresh() },
                 onSettingsClick = { navController.navigate(ScreenRoutes.Settings.route) },
                 onHistoryClick = { navController.navigate(ScreenRoutes.History.route) },
-                onFavoriteClick = { navController.navigate(ScreenRoutes.Favorite.route) }
+                onFavoriteClick = { navController.navigate(ScreenRoutes.Favorite.route) },
+                onFollowingClick = { mid -> navController.navigate(ScreenRoutes.Following.createRoute(mid)) },
+                onDownloadClick = { navController.navigate(ScreenRoutes.DownloadList.route) }
             )
         }
 
@@ -278,6 +280,35 @@ fun AppNavigation(
                 onVideoClick = { bvid, cid -> navigateToVideo(bvid, cid, "") }
             )
         }
+        
+        // --- 5.5 🔥 关注列表 ---
+        composable(
+            route = ScreenRoutes.Following.route,
+            arguments = listOf(
+                navArgument("mid") { type = NavType.LongType }
+            ),
+            enterTransition = { slideIntoContainer(AnimatedContentTransitionScope.SlideDirection.Left, tween(animDuration)) },
+            popExitTransition = { slideOutOfContainer(AnimatedContentTransitionScope.SlideDirection.Right, tween(animDuration)) }
+        ) { backStackEntry ->
+            val mid = backStackEntry.arguments?.getLong("mid") ?: 0L
+            com.android.purebilibili.feature.following.FollowingListScreen(
+                mid = mid,
+                onBack = { navController.popBackStack() },
+                onUserClick = { userMid -> navController.navigate(ScreenRoutes.Space.createRoute(userMid)) }
+            )
+        }
+        
+        // --- 5.6 🔥 离线缓存列表 ---
+        composable(
+            route = ScreenRoutes.DownloadList.route,
+            enterTransition = { slideIntoContainer(AnimatedContentTransitionScope.SlideDirection.Left, tween(animDuration)) },
+            popExitTransition = { slideOutOfContainer(AnimatedContentTransitionScope.SlideDirection.Right, tween(animDuration)) }
+        ) {
+            com.android.purebilibili.feature.download.DownloadListScreen(
+                onBack = { navController.popBackStack() },
+                onVideoClick = { bvid -> navigateToVideo(bvid, 0L, "") }
+            )
+        }
 
         // --- 6. 动态页面 ---
         composable(
@@ -288,6 +319,9 @@ fun AppNavigation(
             DynamicScreen(
                 onVideoClick = { bvid -> navigateToVideo(bvid, 0L, "") },
                 onUserClick = { mid -> navController.navigate(ScreenRoutes.Space.createRoute(mid)) },
+                onLiveClick = { roomId, title, uname ->  // 🔥 直播点击
+                    navController.navigate(ScreenRoutes.Live.createRoute(roomId, title, uname))
+                },
                 onBack = { navController.popBackStack() },
                 onLoginClick = { navController.navigate(ScreenRoutes.Login.route) }  // 🔥 跳转登录
             )
@@ -329,7 +363,8 @@ fun AppNavigation(
                 onBack = { navController.popBackStack() },
                 onOpenSourceLicensesClick = { navController.navigate(ScreenRoutes.OpenSourceLicenses.route) },
                 onAppearanceClick = { navController.navigate(ScreenRoutes.AppearanceSettings.route) },
-                onPlaybackClick = { navController.navigate(ScreenRoutes.PlaybackSettings.route) }
+                onPlaybackClick = { navController.navigate(ScreenRoutes.PlaybackSettings.route) },
+                onPermissionClick = { navController.navigate(ScreenRoutes.PermissionSettings.route) }
             )
         }
 
@@ -376,6 +411,17 @@ fun AppNavigation(
             popExitTransition = { slideOutOfContainer(AnimatedContentTransitionScope.SlideDirection.Right, tween(animDuration)) }
         ) {
             PlaybackSettingsScreen(
+                onBack = { navController.popBackStack() }
+            )
+        }
+        
+        // --- 🔐 权限管理页面 ---
+        composable(
+            route = ScreenRoutes.PermissionSettings.route,
+            enterTransition = { slideIntoContainer(AnimatedContentTransitionScope.SlideDirection.Left, tween(animDuration)) },
+            popExitTransition = { slideOutOfContainer(AnimatedContentTransitionScope.SlideDirection.Right, tween(animDuration)) }
+        ) {
+            com.android.purebilibili.feature.settings.PermissionSettingsScreen(
                 onBack = { navController.popBackStack() }
             )
         }

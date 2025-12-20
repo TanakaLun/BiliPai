@@ -31,6 +31,7 @@ data class UserState(
  */
 enum class HomeCategory(val label: String, val tid: Int = 0) {
     RECOMMEND("推荐", 0),
+    FOLLOW("关注", 0),    // 🔥 关注动态
     POPULAR("热门", 0),
     LIVE("直播", 0),
     ANIME("追番", 13),     // 番剧分区
