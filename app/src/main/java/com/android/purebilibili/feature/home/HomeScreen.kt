@@ -50,13 +50,15 @@ import com.android.purebilibili.core.ui.ErrorState as ModernErrorState
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.haze
 import com.android.purebilibili.core.ui.shimmer
+import com.android.purebilibili.core.ui.LocalSharedTransitionScope  // 🔥 共享过渡
 import io.github.alexzhirkevich.cupertino.CupertinoActivityIndicator
 import coil.imageLoader
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.distinctUntilChanged  // 🚀 性能优化：防止重复触发
+import androidx.compose.animation.ExperimentalSharedTransitionApi  // 🔥 共享过渡实验API
 
 @SuppressLint("UnusedMaterial3ScaffoldPaddingParameter")
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalSharedTransitionApi::class)
 @Composable
 fun HomeScreen(
     viewModel: HomeViewModel = viewModel(),
@@ -146,8 +148,8 @@ fun HomeScreen(
     // 🔥 当前选中的导航项
     var currentNavItem by remember { mutableStateOf(BottomNavItem.HOME) }
     
-    // 🔥🔥 [新增] 底栏可见性状态（初始隐藏，进入后显示触发动画）
-    var bottomBarVisible by remember { mutableStateOf(false) }
+    // 🔥🔥 [新增] 底栏可见性状态
+    var bottomBarVisible by remember { mutableStateOf(true) }  // 🔥 默认可见
     
     // 🔥🔥 包装 onVideoClick：点击视频时先隐藏底栏再导航
     val wrappedOnVideoClick: (String, Long, String) -> Unit = remember(onVideoClick) {
@@ -157,11 +159,18 @@ fun HomeScreen(
         }
     }
     
-    // 🔥🔥 进入/返回首页时触发底栏上滑动画
-    LaunchedEffect(Unit) {
-        // 短暂延迟确保组合完成后再显示，触发滑入动画
-        kotlinx.coroutines.delay(50)
-        bottomBarVisible = true
+    // 🔥🔥 [优化] 使用 ON_START 事件恢复底栏（比 ON_RESUME 更快）
+    val lifecycleOwner = androidx.compose.ui.platform.LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_START) {
+                bottomBarVisible = true
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
     }
     
     // 🔥🔥 [修复] 使用 ViewModel 中的标签页显示索引（跨导航保持）
@@ -320,9 +329,22 @@ fun HomeScreen(
 
     Scaffold(
         bottomBar = {
+            // 🔥 尝试获取共享过渡作用域
+            val sharedTransitionScope = LocalSharedTransitionScope.current
+            
             // 🔥🔥 底栏进入/退出动画：进入首页时从底部滑入，离开首页时向底部滑出
+            // 🔥 使用 renderInSharedTransitionScopeOverlay 保持底栏在共享过渡之上
+            val bottomBarModifier = if (sharedTransitionScope != null) {
+                with(sharedTransitionScope) {
+                    Modifier.renderInSharedTransitionScopeOverlay(zIndexInOverlay = 1f)
+                }
+            } else {
+                Modifier
+            }
+            
             AnimatedVisibility(
                 visible = bottomBarVisible,  // 🔥 受状态控制
+                modifier = bottomBarModifier,
                 enter = slideInVertically(
                     initialOffsetY = { it },  // 从底部滑入
                     animationSpec = tween(350)

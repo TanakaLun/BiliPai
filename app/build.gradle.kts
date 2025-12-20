@@ -110,7 +110,7 @@ composeCompiler {
 
 dependencies {
     // --- 1. Compose UI ---
-    implementation(platform("androidx.compose:compose-bom:2024.09.00"))
+    implementation(platform("androidx.compose:compose-bom:2024.12.01"))  // 🔥 更新到最新版本
     implementation("androidx.activity:activity-compose:1.8.2")
     implementation("androidx.appcompat:appcompat:1.6.1")  // 🚀 For AppCompatDelegate night mode
     implementation("androidx.compose.ui:ui")
