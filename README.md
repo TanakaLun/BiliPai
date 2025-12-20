@@ -5,10 +5,17 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/jay3-yy/BiliPai/releases"><img src="https://img.shields.io/github/v/release/jay3-yy/BiliPai?style=flat-square&color=fb7299" alt="Release"></a>
+  <img src="https://img.shields.io/badge/Version-3.1.0-fb7299?style=flat-square" alt="Version">
+  <img src="https://img.shields.io/github/stars/jay3-yy/BiliPai?style=flat-square&color=yellow" alt="Stars">
+  <img src="https://img.shields.io/github/forks/jay3-yy/BiliPai?style=flat-square&color=green" alt="Forks">
+  <img src="https://img.shields.io/github/last-commit/jay3-yy/BiliPai?style=flat-square&color=purple" alt="Last Commit">
+</p>
+
+<p align="center">
   <img src="https://img.shields.io/badge/Platform-Android%2010+-brightgreen?style=flat-square" alt="Platform">
   <img src="https://img.shields.io/badge/APK-14MB-orange?style=flat-square" alt="Size">
   <img src="https://img.shields.io/badge/License-GPL--3.0-blue?style=flat-square" alt="License">
+  <img src="https://img.shields.io/badge/Plugins-3%20Built--in-blueviolet?style=flat-square" alt="Plugins">
 </p>
 
 <p align="center">
@@ -46,6 +53,17 @@
 | **后台播放** | 锁屏/切后台继续听，支持通知栏控制 |
 | **播放记忆** | 自动记录观看进度，下次打开继续播放 |
 | **TV 登录** | 支持 TV 端扫码登录，解锁大会员专属高画质 |
+| **插件系统** | 内置空降助手、去广告、弹幕增强三大插件，可扩展架构 |
+
+### 🔌 插件系统
+
+| 插件 | 描述 |
+|-----|-----|
+| **空降助手** | 基于 BilibiliSponsorBlock 数据库，自动跳过广告/恰饭片段 |
+| **去广告插件** | 智能过滤推荐流中的商业推广内容 |
+| **弹幕增强** | 关键词屏蔽与高亮，打造个性化弹幕体验 |
+| **插件中心** | 统一管理所有插件，支持独立配置 |
+| **可扩展架构** | 基于 PlayerPlugin/FeedPlugin/DanmakuPlugin 接口，支持未来扩展 |
 
 ### 📺 番剧追番
 
@@ -230,6 +248,8 @@ app/src/main/java/com/android/purebilibili/
 - [x] Material You + 深色模式
 - [x] TV 扫码登录 (解锁高画质)
 - [x] 共享元素过渡动画
+- [x] 插件系统核心架构
+- [x] 内置插件 (空降助手 / 去广告 / 弹幕增强)
 
 ### 🚧 开发中
 
