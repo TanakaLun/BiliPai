@@ -29,9 +29,12 @@
 </p>
 
 <p align="center">
-  <img src="docs/images/screenshot_dark_home.png" alt="首页" width="250">
-  <img src="docs/images/screenshot_settings.png" alt="设置" width="250">
-  <img src="docs/images/screenshot_licenses.png" alt="开源许可证" width="250">
+  <img src="docs/images/screenshot_1_home.png" alt="首页" height="500">
+  <img src="docs/images/screenshot_2_live.png" alt="直播" height="500">
+  <img src="docs/images/screenshot_3_video.png" alt="视频详情" height="500">
+  <img src="docs/images/screenshot_4_settings.png" alt="设置" height="500">
+  <img src="docs/images/screenshot_5_appearance.png" alt="外观设置" height="500">
+  <img src="docs/images/screenshot_6_permissions.png" alt="权限管理" height="500">
 </p>
 
 ---
