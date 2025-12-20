@@ -24,20 +24,13 @@
 
 ## 📸 应用预览
 
-<table align="center">
-  <tr>
-    <td><img src="docs/images/screenshot_1.png" width="150"></td>
-    <td><img src="docs/images/screenshot_2.png" width="150"></td>
-    <td><img src="docs/images/screenshot_3.png" width="150"></td>
-    <td><img src="docs/images/screenshot_4.png" width="150"></td>
-  </tr>
-  <tr align="center">
-    <td><sub>首页推荐</sub></td>
-    <td><sub>直播分区</sub></td>
-    <td><sub>视频播放</sub></td>
-    <td><sub>设置页面</sub></td>
-  </tr>
-</table>
+<p align="center">
+  <img src="docs/images/app_preview_banner.png" alt="App Preview" width="100%">
+</p>
+
+<p align="center">
+  <img src="docs/images/screenshot_dark_home.png" alt="Dark Mode" width="280">
+</p>
 
 ---
 
