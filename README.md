@@ -24,18 +24,24 @@
 
 ## 📸 应用预览
 
-<p align="center">
-  <img src="docs/images/screenshot_1.png" width="16%">
-  <img src="docs/images/screenshot_2.png" width="16%">
-  <img src="docs/images/screenshot_3.png" width="16%">
-  <img src="docs/images/screenshot_4.png" width="16%">
-  <img src="docs/images/screenshot_5.png" width="16%">
-  <img src="docs/images/screenshot_6.png" width="16%">
-</p>
-
-<p align="center">
-  <sub>首页推荐 | 直播分区 | 视频播放 | 设置页面 | 权限管理 | 外观设置</sub>
-</p>
+<table align="center">
+  <tr>
+    <td><img src="docs/images/screenshot_1.png" width="150"></td>
+    <td><img src="docs/images/screenshot_2.png" width="150"></td>
+    <td><img src="docs/images/screenshot_3.png" width="150"></td>
+    <td><img src="docs/images/screenshot_4.png" width="150"></td>
+    <td><img src="docs/images/screenshot_5.png" width="150"></td>
+    <td><img src="docs/images/screenshot_6.png" width="150"></td>
+  </tr>
+  <tr align="center">
+    <td><sub>首页推荐</sub></td>
+    <td><sub>直播分区</sub></td>
+    <td><sub>视频播放</sub></td>
+    <td><sub>设置页面</sub></td>
+    <td><sub>权限管理</sub></td>
+    <td><sub>外观设置</sub></td>
+  </tr>
+</table>
 
 ---
 
@@ -305,12 +311,20 @@ cd BiliPai
 | 项目 | 说明 |
 |-----|-----|
 | [Jetpack Compose](https://developer.android.com/jetpack/compose) | 声明式 UI 框架 |
-| [ExoPlayer](https://github.com/androidx/media) | 媒体播放引擎 |
+| [ExoPlayer (Media3)](https://github.com/androidx/media) | 媒体播放引擎 |
 | [DanmakuFlameMaster](https://github.com/bilibili/DanmakuFlameMaster) | B 站弹幕引擎 |
+| [DanmakuRenderEngine](https://github.com/bytedance/DanmakuRenderEngine) | 字节跳动高性能弹幕引擎 |
 | [bilibili-API-collect](https://github.com/SocialSisterYi/bilibili-API-collect) | B 站 API 文档 |
 | [Haze](https://github.com/chrisbanes/haze) | 毛玻璃效果库 |
-| [Lottie](https://github.com/airbnb/lottie-android) | 动画库 |
-| [Coil](https://github.com/coil-kt/coil) | 图片加载库 |
+| [Lottie](https://github.com/airbnb/lottie-android) | Airbnb 动画库 |
+| [Coil](https://github.com/coil-kt/coil) | Kotlin 图片加载库 |
+| [Compose Shimmer](https://github.com/valentinilk/compose-shimmer) | 骨架屏加载效果 |
+| [Compose Cupertino](https://github.com/alexzhirkevich/compose-cupertino) | iOS 风格 UI 组件 |
+| [ZXing](https://github.com/zxing/zxing) | 二维码生成 |
+| [Room](https://developer.android.com/training/data-storage/room) | 数据库持久化 |
+| [Retrofit](https://github.com/square/retrofit) | HTTP 网络请求 |
+| [OkHttp](https://github.com/square/okhttp) | HTTP 客户端 |
+| [Firebase Crashlytics](https://firebase.google.com/docs/crashlytics) | 崩溃追踪分析 |
 
 ---
 
