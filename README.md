@@ -29,7 +29,9 @@
 </p>
 
 <p align="center">
-  <img src="docs/images/screenshot_dark_home.png" alt="Dark Mode" width="280">
+  <img src="docs/images/screenshot_dark_home.png" alt="首页" width="250">
+  <img src="docs/images/screenshot_settings.png" alt="设置" width="250">
+  <img src="docs/images/screenshot_licenses.png" alt="开源许可证" width="250">
 </p>
 
 ---
