@@ -50,6 +50,12 @@ jobs:
     
         - name: Grant execute permission to gradlew
           run: chmod +x gradlew
+          
+        - name: Set Up FCM Config
+          run: |
+            cd ./app
+            echo "${{ secrets.FCM }}" | base64 -d > google-services.json
+            chmod +x google-services.json
     
         - name: Build APK
           run: |
